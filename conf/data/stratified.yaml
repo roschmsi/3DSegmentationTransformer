@@ -1,0 +1,26 @@
+# @package _group_
+
+data_name: scannetv2
+data_root: /cluster/54/data/preprocessed/scannet/scannetv2
+classes: 20
+fea_dim: 6
+voxel_size: 0.02
+voxel_max: 120000
+loop: 6
+
+# splits
+train_mode: train
+validation_mode: validation
+test_mode: validation # test  # validation
+
+# data loader
+pin_memory: false
+num_workers: 4
+batch_size: 5
+test_batch_size: 1
+cache_data: false
+
+ignore_label: 255
+
+in_channels: 3 # in_channels = 3 * (add_normals + add_colors + add_raw_coordinates)
+num_labels: 20

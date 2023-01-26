@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from util.voxelize import voxelize
-from util.data_util import collate_fn
-from util.data_util import data_prepare_scannet as data_prepare
+from stratified_transformer.util.voxelize import voxelize
+from stratified_transformer.util.data_util import collate_fn
+from stratified_transformer.util.data_util import data_prepare_scannet as data_prepare
 import glob
 
 

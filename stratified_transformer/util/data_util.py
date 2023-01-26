@@ -3,7 +3,7 @@ import random
 
 import torch
 
-from util.voxelize import voxelize
+from stratified_transformer.util.voxelize import voxelize
 
 
 # def sa_create(name, var):
@@ -70,8 +70,7 @@ def collate_fn_limit_mix3d(batch, max_batch_points, logger, p):
     # return torch.cat(coord), torch.cat(feat), torch.cat(label), torch.IntTensor(offset)
     # return torch.cat(coord_mix3d), torch.cat(feat_mix3d), torch.cat(label_mix3d), torch.IntTensor(offset_mix3d)
 
-
-def collate_fn_limit(batch, max_batch_points, logger):
+def collate_fn_limit(batch, max_batch_points, logger=None):
     coord, feat, label = list(zip(*batch))
     offset, count = [], 0
     # print("coord:", len(coord))

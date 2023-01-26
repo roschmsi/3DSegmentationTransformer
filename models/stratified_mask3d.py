@@ -11,6 +11,7 @@ from third_party.pointnet2.pointnet2_utils import furthest_point_sample
 from models.modules.helpers_3detr import GenericMLP
 from torch_scatter import scatter_mean, scatter_max, scatter_min
 from torch.cuda.amp import autocast
+from models.mask3d import CrossAttentionLayer, FFNLayer, _get_activation_fn, SelfAttentionLayer, PositionalEncoding3D
 
 class StratifiedMask3D(nn.Module):
     def __init__(self, config, hidden_dim, num_queries, num_heads, dim_feedforward,
@@ -54,10 +55,11 @@ class StratifiedMask3D(nn.Module):
 
         self.backbone = hydra.utils.instantiate(config.backbone)
         self.num_levels = len(self.hlevels)
-        sizes = self.backbone.PLANES[-5:]
+        
+        sizes = (384, 192, 96, 48)
 
         self.mask_features_head = conv(
-            self.backbone.PLANES[7], self.mask_dim, kernel_size=1, stride=1, bias=True, D=3
+            48, self.mask_dim, kernel_size=1, stride=1, bias=True, D=3
         )
 
         if self.scatter_type == "mean":
@@ -196,15 +198,18 @@ class StratifiedMask3D(nn.Module):
 
         return pos_encodings_pcd
 
-    def forward(self, x, point2segment=None, raw_coordinates=None, is_eval=False):
+    def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
+        # TODO pcd_features
+        aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
+        pcd_features = aux[-1]
+
         import pdb
         pdb.set_trace()
-        pcd_features, aux = self.backbone(x)  # (num_voxels, 96)
 
-        batch_size = len(x.decomposed_coordinates)
+        batch_size = len(offset)
 
         with torch.no_grad():
-            coordinates = me.SparseTensor(features=raw_coordinates,
+            coordinates = me.SparseTensor(features=raw_coordinates[:33127],
                                           coordinate_manager=aux[-1].coordinate_manager,
                                           coordinate_map_key=aux[-1].coordinate_map_key,
                                           device=aux[-1].device)
@@ -249,7 +254,8 @@ class StratifiedMask3D(nn.Module):
                 queries = self.np_feature_projection(queries)
             query_pos = query_pos.permute((2, 0, 1))
         elif self.random_queries:
-            query_pos = torch.rand(batch_size, self.mask_dim, self.num_queries, device=x.device) - 0.5
+            # TODO fix device
+            query_pos = torch.rand(batch_size, self.mask_dim, self.num_queries, device='cuda:0') - 0.5
 
             queries = torch.zeros_like(query_pos).permute((0, 2, 1))
             query_pos = query_pos.permute((2, 0, 1))
@@ -276,6 +282,8 @@ class StratifiedMask3D(nn.Module):
                 decoder_counter = 0
             for i, hlevel in enumerate(self.hlevels):
                 if self.train_on_segments:
+                    import pdb
+                    pdb.set_trace()
                     output_class, outputs_mask, attn_mask = self.mask_module(queries, # 2, 100, 128
                                                           mask_features, # num_voxels, 128
                                                           mask_segments, # 682, 128
@@ -284,6 +292,8 @@ class StratifiedMask3D(nn.Module):
                                                           point2segment=point2segment,
                                                           coords=coords)
                 else:
+                    import pdb
+                    pdb.set_trace()
                     output_class, outputs_mask, attn_mask = self.mask_module(queries,
                                                           mask_features,
                                                           None,
@@ -294,6 +304,8 @@ class StratifiedMask3D(nn.Module):
 
                 decomposed_aux = aux[hlevel].decomposed_features
                 decomposed_attn = attn_mask.decomposed_features
+
+                pdb.set_trace()
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
 
@@ -333,6 +345,8 @@ class StratifiedMask3D(nn.Module):
 
                     rand_idx.append(idx)
                     mask_idx.append(midx)
+
+                pdb.set_trace()
 
                 batched_aux = torch.stack([
                     decomposed_aux[k][rand_idx[k], :] for k in range(len(rand_idx))

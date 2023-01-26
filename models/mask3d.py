@@ -55,6 +55,10 @@ class Mask3D(nn.Module):
 
         self.backbone = hydra.utils.instantiate(config.backbone)
         self.num_levels = len(self.hlevels)
+
+        import pdb
+        pdb.set_trace()
+
         sizes = self.backbone.PLANES[-5:]
 
         self.mask_features_head = conv(
@@ -272,6 +276,9 @@ class Mask3D(nn.Module):
         predictions_class = []
         predictions_mask = []
 
+        import pdb
+        pdb.set_trace()
+
         for decoder_counter in range(self.num_decoders): # here 3
             if self.shared_decoder:
                 decoder_counter = 0
@@ -424,6 +431,8 @@ class Mask3D(nn.Module):
                 output_segments.append(mask_segments[i] @ mask_embed[i].T)
                 output_masks.append(output_segments[-1][point2segment[i]])
         else:
+            import pdb
+            pdb.set_trace()
             for i in range(mask_features.C[-1, 0] + 1):
                 output_masks.append(mask_features.decomposed_features[i] @ mask_embed[i].T)
 

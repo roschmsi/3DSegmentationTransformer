@@ -17,13 +17,13 @@ import torch.distributed as dist
 import torch.optim.lr_scheduler as lr_scheduler
 from tensorboardX import SummaryWriter
 
-from util import dataset, config
-from util.s3dis import S3DIS
-from util.scannet_v2 import Scannetv2
-from util.common_util import AverageMeter, intersectionAndUnionGPU, find_free_port, poly_learning_rate, smooth_loss
-from util.data_util import collate_fn, collate_fn_limit
-from util import transform
-from util.logger import get_logger
+from stratified_transformer.util import dataset, config
+from stratified_transformer.util.s3dis import S3DIS
+from stratified_transformer.util.scannet_v2 import Scannetv2
+from stratified_transformer.util.common_util import AverageMeter, intersectionAndUnionGPU, find_free_port, poly_learning_rate, smooth_loss
+from stratified_transformer.util.data_util import collate_fn, collate_fn_limit
+from stratified_transformer.util import transform
+from stratified_transformer.util.logger import get_logger
 
 from functools import partial
 from util.lr import MultiStepWithWarmup, PolyLR, PolyLRwithWarmup

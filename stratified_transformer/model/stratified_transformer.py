@@ -5,7 +5,9 @@ from torch_scatter import scatter_softmax
 from timm.models.layers import DropPath, trunc_normal_
 from torch_points3d.core.common_modules import FastBatchNorm1d
 from torch_geometric.nn import voxel_grid
-from lib.pointops2.functions import pointops
+from stratified_transformer.lib.pointops2.functions import pointops
+import numpy as np
+import MinkowskiEngine as ME
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
@@ -400,8 +402,14 @@ class KPConvResBlock(nn.Module):
 class Stratified(nn.Module):
     def __init__(self, downsample_scale, depths, channels, num_heads, window_size, up_k, \
             grid_sizes, quant_sizes, rel_query=True, rel_key=False, rel_value=False, drop_path_rate=0.2, \
-            num_layers=4, concat_xyz=False, num_classes=13, ratio=0.25, k=16, prev_grid_size=0.04, sigma=1.0, stem_transformer=False):
+            num_layers=4, concat_xyz=False, num_classes=13, ratio=0.25, k=16, prev_grid_size=0.04, sigma=1.0, stem_transformer=False, patch_size=1):
         super().__init__()
+
+        patch_size = grid_sizes * patch_size
+        window_size = [patch_size * window_size * (2**i) for i in range(num_layers)]
+        grid_sizes = [patch_size * (2**i) for i in range(num_layers)]
+        quant_sizes = [quant_sizes * (2**i) for i in range(num_layers)]
+
         
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
 
@@ -440,9 +448,6 @@ class Stratified(nn.Module):
         xyz_stack = []
         offset_stack = []
 
-        import pdb
-        pdb.set_trace()
-
         # feats (N, 6)
 
         for i, layer in enumerate(self.stem_layer):
@@ -469,19 +474,35 @@ class Stratified(nn.Module):
             xyz = xyz_down
             offset = offset_down
 
-        import pdb
-        pdb.set_trace()
-
         feats = feats_stack.pop()
         xyz = xyz_stack.pop()
         offset = offset_stack.pop()
 
+        decoder_output = []
+
+        voxel_size = 0.02
+        coords = torch.floor(xyz / voxel_size)
+
+        sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())      
+        decoder_output.append(ME.SparseTensor(sparse_feats, sparse_coords.cuda()))
+
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
 
-        out = self.classifier(feats)
 
-        return out        
+            voxel_size = 0.02
+            coords = torch.floor(xyz / voxel_size)
+
+            sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
+            sparse_coords, sparse_feats = ME.utils.sparse_collate([sparse_coords], [sparse_feats]) 
+            decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda()))
+
+        # out = self.classifier(feats)
+        # return out        
+
+        # actually required: pdc_feats, aux
+        # aux as sparse tensors
+        return decoder_output
 
     def init_weights(self):
         """Initialize the weights in backbone.

@@ -1,0 +1,30 @@
+# @package data
+train_dataset:
+  _target_: stratified_transformer.util.scannet_v2.Scannetv2
+  split: "train"
+  data_root: ${data.data_root}
+  voxel_size:  ${data.voxel_size}
+  voxel_max:  ${data.voxel_max}
+  transform: null
+  shuffle_index: True
+  loop: ${data.loop}
+
+validation_dataset:
+  _target_: stratified_transformer.util.scannet_v2.Scannetv2
+  split: "val"
+  data_root: ${data.data_root}
+  voxel_size:  ${data.voxel_size}
+  voxel_max:  ${data.voxel_max}
+  transform: null
+  shuffle_index: True
+  loop: ${data.loop}
+
+test_dataset:
+  _target_: stratified_transformer.util.scannet_v2.Scannetv2
+  split: "val"
+  data_root: ${data.data_root}
+  voxel_size:  ${data.voxel_size}
+  voxel_max:  ${data.voxel_max}
+  transform: train_transform
+  shuffle_index: null
+  loop: ${data.loop}

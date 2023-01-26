@@ -1,0 +1,61 @@
+# @package _group_
+_target_: models.StratifiedMask3D
+
+# transformer parameters
+hidden_dim: 128
+dim_feedforward: 1024
+num_queries: 100
+num_heads: 8
+num_decoders: 3
+dropout: 0.0
+pre_norm: false
+use_level_embed: false
+normalize_pos_enc: true
+positional_encoding_type: "fourier"
+gauss_scale: 1.0
+hlevels: [0,1,2,3]
+
+# queries
+# TODO change again
+non_parametric_queries: false
+random_query_both: false
+random_normal: false
+random_queries: true
+use_np_features: false
+
+# sampling
+sample_sizes: [200, 800, 3200, 12800, 51200]
+max_sample_size: false # change false means sampling activated
+
+shared_decoder: true
+num_classes: ${general.num_targets}
+train_on_segments: ${general.train_on_segments}
+scatter_type: "mean"
+
+voxel_size: ${data.voxel_size}
+
+config:
+  backbone:
+    _target_: stratified_transformer.model.stratified_transformer.Stratified
+    downsample_scale: 8
+    depths: [2, 2, 6, 2] 
+    channels: [48, 96, 192, 384] 
+    num_heads: [3, 6, 12, 24] 
+    window_size: 4
+    up_k: 3
+    grid_sizes: 0.04
+    quant_sizes: 0.01
+    rel_query: True
+    rel_key: True
+    rel_value: True
+    drop_path_rate: 0.3
+    num_layers: 4
+    concat_xyz: True
+    num_classes: 13 ## why
+    ratio: 0.25
+    k: 16
+    prev_grid_size: 0.04
+    sigma: 1.0
+    stem_transformer: True
+    patch_size: 1
+

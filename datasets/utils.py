@@ -1,5 +1,6 @@
 import MinkowskiEngine as ME
 import numpy as np
+from stratified_transformer.util.data_util import collate_fn, collate_fn_limit
 import torch
 from random import random
 
@@ -195,7 +196,8 @@ def batch_instances(batch):
 def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
              ignore_class_threshold, filter_out_classes, label_offset, num_queries):
     (coordinates, features, labels, original_labels, inverse_maps, original_colors, original_normals,
-     original_coordinates, idx) = (
+     original_coordinates, idx, original_features) = (
+        [],
         [],
         [],
         [],
@@ -218,10 +220,13 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
     for sample in batch:
         idx.append(sample[7])
         original_coordinates.append(sample[6])
+        original_features.append(sample[1])
         original_labels.append(sample[2])
         full_res_coords.append(sample[0])
         original_colors.append(sample[4])
         original_normals.append(sample[5])
+
+        print(sample[0])
 
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update({"coordinates": torch.from_numpy(coords).to("cpu").contiguous(), "features": sample[1]})
@@ -320,12 +325,12 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
     if "train" not in mode:
         return (
             NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords,
-                  target_full, original_colors, original_normals, original_coordinates, idx), target,
+                  target_full, original_colors, original_normals, original_coordinates, idx, original_features), target,
             [sample[3] for sample in batch]
         )
     else:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords), target,
+            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords, original_coordinates==original_coordinates, original_features=original_features), target,
             [sample[3] for sample in batch]
         )
 
@@ -475,7 +480,7 @@ class NoGpu:
     def __init__(
             self, coordinates, features, original_labels=None, inverse_maps=None, full_res_coords=None,
             target_full=None, original_colors=None, original_normals=None, original_coordinates=None,
-            idx=None
+            idx=None, original_features=None
     ):
         """ helper class to prevent gpu loading on lightning """
         self.coordinates = coordinates
@@ -487,6 +492,7 @@ class NoGpu:
         self.original_colors = original_colors
         self.original_normals = original_normals
         self.original_coordinates = original_coordinates
+        self.original_features = original_features
         self.idx = idx
 
 
@@ -502,3 +508,20 @@ class NoGpuMask:
 
         self.masks = masks
         self.labels = labels
+
+
+
+class StratifiedCollate:
+    def __init__(
+            self,
+            max_batch_points=None,
+            train=False
+    ):
+        self.max_batch_points = max_batch_points
+        self.train = train
+
+    def __call__(self, batch):
+        if self.train:
+            return collate_fn_limit(batch, max_batch_points=self.max_batch_points, logger=None)
+        else:
+            return collate_fn(batch)

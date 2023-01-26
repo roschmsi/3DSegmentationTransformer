@@ -13,9 +13,9 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-from util import config, transform
-from util.common_util import AverageMeter, intersectionAndUnion, check_makedirs
-from util.voxelize import voxelize
+from stratified_transformer.util import config, transform
+from stratified_transformer.util.common_util import AverageMeter, intersectionAndUnion, check_makedirs
+from stratified_transformer.util.voxelize import voxelize
 import torch_points_kernels as tp
 import torch.nn.functional as F
 
