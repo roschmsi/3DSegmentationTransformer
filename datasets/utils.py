@@ -226,8 +226,6 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
         original_colors.append(sample[4])
         original_normals.append(sample[5])
 
-        print(sample[0])
-
         coords = np.floor(sample[0] / voxel_size)
         voxelization_dict.update({"coordinates": torch.from_numpy(coords).to("cpu").contiguous(), "features": sample[1]})
 
@@ -330,7 +328,7 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
         )
     else:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords, original_coordinates==original_coordinates, original_features=original_features), target,
+            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords, original_coordinates=original_coordinates, original_features=original_features), target,
             [sample[3] for sample in batch]
         )
 

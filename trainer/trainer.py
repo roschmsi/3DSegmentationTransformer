@@ -318,6 +318,33 @@ class InstanceSegmentation(pl.LightningModule):
 
         v.save(f"{self.config['general']['save_dir']}/visualizations/{file_name}")
 
+
+    def save_attention_visualizations(self, cross_attention_coordinates, cross_attention_masks, original_normals, point_size=10):
+        v = vis.Visualizer()
+
+        cross_attention_masks = cross_attention_masks.transpose(0, 2).cpu().numpy()
+
+        import pdb
+        pdb.set_trace()
+
+        for i in range(cross_attention_masks.shape[1]):
+
+            mask = cross_attention_masks[:, i] / cross_attention_masks[:, i].max()
+
+            # mask[mask < 0.1] = 0
+
+            colors = np.array([255, 0, 0]) * mask
+            colors[colors.sum(1) == 0] = 169
+
+            
+            v.add_points(f"Query {i}", cross_attention_coordinates.cpu().numpy(),
+                        colors= colors,
+                        # normals=original_normals,
+                        visible=False,
+                        point_size=point_size)
+
+        v.save(f"{self.config['general']['save_dir']}/visualizations/cross_attention_mask_visualization")
+
     def eval_step(self, batch, batch_idx):
         data, target, file_names = batch
         inverse_maps = data.inverse_maps
@@ -439,6 +466,7 @@ class InstanceSegmentation(pl.LightningModule):
     def eval_instance_step(self, output, target_low_res, target_full_res, inverse_maps, file_names,
                            full_res_coords, original_colors, original_normals, raw_coords, idx, first_full_res=False,
                            backbone_features=None,):
+
         label_offset = self.validation_dataset.label_offset
         prediction = output['aux_outputs']
         prediction.append({
@@ -632,6 +660,10 @@ class InstanceSegmentation(pl.LightningModule):
                 }
 
             if self.config.general.save_visualizations:
+                self.save_attention_visualizations(cross_attention_coordinates=output['cross_attention_coordinates'],
+                                                    cross_attention_masks=output['cross_attention_masks'],
+                                                    original_normals=original_normals[bid])
+
                 if 'cond_inner' in self.test_dataset.data[idx[bid]]:
                     target_full_res[bid]['masks'] = target_full_res[bid]['masks'][:, self.test_dataset.data[idx[bid]]['cond_inner']]
                     self.save_visualizations(target_full_res[bid],
@@ -971,12 +1003,46 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             raw_coordinates = data.features[:, -3:]
             data.features = data.features[:, :-3]
 
-        data = ME.SparseTensor(coordinates=data.coordinates,
-                              features=data.features,
-                              device=self.device)
+        # data = ME.SparseTensor(coordinates=data.coordinates,
+        #                       features=data.features,
+        #                       device=self.device)
+
+        # prepare mask3d data for stratified transformer ##############################################################
+
+        import pdb
+        pdb.set_trace()
+
+        offset = torch.IntTensor([len(data.original_coordinates[0])])
+        offset_ = offset.clone()
+        offset_[1:] = offset_[1:] - offset_[:-1]
+        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
+
+        sigma = 1.0
+        grid_size = 0.02
+        max_num_neighbors = 34
+        concat_xyz = True
+        radius = 2.5 * grid_size * sigma
+        coord = torch.from_numpy(data.original_coordinates[0])
+        feat = torch.from_numpy(data.original_features[0][:, :3])
+
+        neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+    
+        coord, feat, offset = coord.cuda(non_blocking=True), feat.cuda(non_blocking=True), offset.cuda(non_blocking=True)
+        batch = batch.cuda(non_blocking=True)
+        neighbor_idx = neighbor_idx.cuda(non_blocking=True)
+        assert batch.shape[0] == feat.shape[0]
+        
+        if concat_xyz:
+            feat = torch.cat([feat, coord], 1)
+
+        ####################################################################################################################
 
         try:
-            output = self.forward(data,
+            output = self.forward(feat = feat,
+                                  coord = coord,
+                                  offset = offset,
+                                  batch = batch,
+                                  neighbor_idx = neighbor_idx,
                                   point2segment=[target[i]['point2segment'] for i in range(len(target))],
                                   raw_coordinates=raw_coordinates)
         except RuntimeError as run_err:
@@ -1205,7 +1271,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         # data = ME.SparseTensor(coordinates=data.coordinates, features=data.features, device=self.device)
 
-        offset = torch.IntTensor([len(data.original_coordinates[0][:50000])])
+        offset = torch.IntTensor([len(data.original_coordinates[0])])
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
         batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
@@ -1215,8 +1281,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         max_num_neighbors = 34
         concat_xyz = True
         radius = 2.5 * grid_size * sigma
-        coord = torch.from_numpy(data.original_coordinates[0])[:50000]
-        feat = torch.from_numpy(data.original_features[0][:, :3])[:50000]
+        coord = torch.from_numpy(data.original_coordinates[0])
+        feat = torch.from_numpy(data.original_features[0][:, :3])
 
         neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
     

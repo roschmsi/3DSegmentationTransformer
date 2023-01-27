@@ -8,6 +8,7 @@ from torch_geometric.nn import voxel_grid
 from stratified_transformer.lib.pointops2.functions import pointops
 import numpy as np
 import MinkowskiEngine as ME
+from MinkowskiEngine import SparseTensorQuantizationMode
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
@@ -483,19 +484,21 @@ class Stratified(nn.Module):
         voxel_size = 0.02
         coords = torch.floor(xyz / voxel_size)
 
-        sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())      
-        decoder_output.append(ME.SparseTensor(sparse_feats, sparse_coords.cuda()))
+        quantization_mode = SparseTensorQuantizationMode.RANDOM_SUBSAMPLE # NO_QUANTIZATION
+
+        # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())     
+        sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats])  
+        decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda(), quantization_mode=quantization_mode))
 
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
 
-
             voxel_size = 0.02
             coords = torch.floor(xyz / voxel_size)
 
-            sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
-            sparse_coords, sparse_feats = ME.utils.sparse_collate([sparse_coords], [sparse_feats]) 
-            decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda()))
+            # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
+            sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats]) 
+            decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda(), quantization_mode=quantization_mode))
 
         # out = self.classifier(feats)
         # return out        

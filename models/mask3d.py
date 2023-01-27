@@ -56,9 +56,6 @@ class Mask3D(nn.Module):
         self.backbone = hydra.utils.instantiate(config.backbone)
         self.num_levels = len(self.hlevels)
 
-        import pdb
-        pdb.set_trace()
-
         sizes = self.backbone.PLANES[-5:]
 
         self.mask_features_head = conv(
@@ -202,8 +199,6 @@ class Mask3D(nn.Module):
         return pos_encodings_pcd
 
     def forward(self, x, point2segment=None, raw_coordinates=None, is_eval=False):
-        import pdb
-        pdb.set_trace()
         pcd_features, aux = self.backbone(x)  # (num_voxels, 96)
 
         batch_size = len(x.decomposed_coordinates)
@@ -275,9 +270,6 @@ class Mask3D(nn.Module):
 
         predictions_class = []
         predictions_mask = []
-
-        import pdb
-        pdb.set_trace()
 
         for decoder_counter in range(self.num_decoders): # here 3
             if self.shared_decoder:
@@ -363,7 +355,7 @@ class Mask3D(nn.Module):
                 if self.use_level_embed:
                     src_pcd += self.level_embed.weight[i]
 
-                output = self.cross_attention[decoder_counter][i](
+                output, cross_attention_masks = self.cross_attention[decoder_counter][i](
                     queries.permute((1, 0, 2)),
                     src_pcd,
                     memory_mask=batched_attn.repeat_interleave(self.num_heads, dim=0).permute((0, 2, 1)),
@@ -412,7 +404,9 @@ class Mask3D(nn.Module):
                 predictions_class, predictions_mask
             ),
             'sampled_coords': sampled_coords.detach().cpu().numpy() if sampled_coords is not None else None,
-            'backbone_features': pcd_features
+            'backbone_features': pcd_features,
+            'cross_attention_masks': cross_attention_masks,
+            'cross_attention_coordinates': aux[3].coordinates[:, 1:] * 0.02,
         }
 
     def mask_module(self, query_feat, mask_features, mask_segments, num_pooling_steps, ret_attn_mask=True,
@@ -431,8 +425,6 @@ class Mask3D(nn.Module):
                 output_segments.append(mask_segments[i] @ mask_embed[i].T)
                 output_masks.append(output_segments[-1][point2segment[i]])
         else:
-            import pdb
-            pdb.set_trace()
             for i in range(mask_features.C[-1, 0] + 1):
                 output_masks.append(mask_features.decomposed_features[i] @ mask_embed[i].T)
 
@@ -589,14 +581,15 @@ class CrossAttentionLayer(nn.Module):
                      memory_key_padding_mask = None,
                      pos = None,
                      query_pos = None):
-        tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
+
+        tgt2, cross_attention_masks = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
                                    key=self.with_pos_embed(memory, pos),
-                                   value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[0]
+                                   value=memory, attn_mask=memory_mask, need_weights=True,
+                                   key_padding_mask=memory_key_padding_mask)
         tgt = tgt + self.dropout(tgt2)
         tgt = self.norm(tgt)
 
-        return tgt
+        return tgt, cross_attention_masks
 
     def forward_pre(self, tgt, memory,
                     memory_mask = None,
@@ -605,13 +598,13 @@ class CrossAttentionLayer(nn.Module):
                     query_pos = None):
         tgt2 = self.norm(tgt)
 
-        tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt2, query_pos),
+        tgt2, cross_attention_masks = self.multihead_attn(query=self.with_pos_embed(tgt2, query_pos),
                                    key=self.with_pos_embed(memory, pos),
-                                   value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[0]
+                                   value=memory, attn_mask=memory_mask, need_weights=True,
+                                   key_padding_mask=memory_key_padding_mask)
         tgt = tgt + self.dropout(tgt2)
 
-        return tgt
+        return tgt, cross_attention_masks
 
     def forward(self, tgt, memory,
                 memory_mask = None,

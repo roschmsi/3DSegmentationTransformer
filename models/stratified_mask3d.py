@@ -56,7 +56,7 @@ class StratifiedMask3D(nn.Module):
         self.backbone = hydra.utils.instantiate(config.backbone)
         self.num_levels = len(self.hlevels)
         
-        sizes = (384, 192, 96, 48)
+        sizes = (384, 384, 192, 96, 48)
 
         self.mask_features_head = conv(
             48, self.mask_dim, kernel_size=1, stride=1, bias=True, D=3
@@ -203,13 +203,10 @@ class StratifiedMask3D(nn.Module):
         aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
         pcd_features = aux[-1]
 
-        import pdb
-        pdb.set_trace()
-
         batch_size = len(offset)
 
         with torch.no_grad():
-            coordinates = me.SparseTensor(features=raw_coordinates[:33127],
+            coordinates = me.SparseTensor(features=pcd_features.coordinates[:, 1:] * self.voxel_size,
                                           coordinate_manager=aux[-1].coordinate_manager,
                                           coordinate_map_key=aux[-1].coordinate_map_key,
                                           device=aux[-1].device)
@@ -282,8 +279,6 @@ class StratifiedMask3D(nn.Module):
                 decoder_counter = 0
             for i, hlevel in enumerate(self.hlevels):
                 if self.train_on_segments:
-                    import pdb
-                    pdb.set_trace()
                     output_class, outputs_mask, attn_mask = self.mask_module(queries, # 2, 100, 128
                                                           mask_features, # num_voxels, 128
                                                           mask_segments, # 682, 128
@@ -292,8 +287,6 @@ class StratifiedMask3D(nn.Module):
                                                           point2segment=point2segment,
                                                           coords=coords)
                 else:
-                    import pdb
-                    pdb.set_trace()
                     output_class, outputs_mask, attn_mask = self.mask_module(queries,
                                                           mask_features,
                                                           None,
@@ -304,8 +297,6 @@ class StratifiedMask3D(nn.Module):
 
                 decomposed_aux = aux[hlevel].decomposed_features
                 decomposed_attn = attn_mask.decomposed_features
-
-                pdb.set_trace()
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
 
@@ -345,8 +336,6 @@ class StratifiedMask3D(nn.Module):
 
                     rand_idx.append(idx)
                     mask_idx.append(midx)
-
-                pdb.set_trace()
 
                 batched_aux = torch.stack([
                     decomposed_aux[k][rand_idx[k], :] for k in range(len(rand_idx))
@@ -391,6 +380,9 @@ class StratifiedMask3D(nn.Module):
 
                 predictions_class.append(output_class)
                 predictions_mask.append(outputs_mask)
+
+            # import pdb
+            # pdb.set_trace()
 
         if self.train_on_segments:
             output_class, outputs_mask = self.mask_module(queries,

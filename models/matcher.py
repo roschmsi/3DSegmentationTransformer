@@ -142,6 +142,9 @@ class HungarianMatcher(nn.Module):
             #     align_corners=False,
             # ).squeeze(1)
 
+            # import pdb
+            # pdb.set_trace()
+
             with autocast(enabled=False):
                 out_mask = out_mask.float()
                 tgt_mask = tgt_mask.float()
