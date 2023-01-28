@@ -58,9 +58,11 @@ class StratifiedMask3D(nn.Module):
         
         sizes = (384, 384, 192, 96, 48)
 
-        self.mask_features_head = conv(
-            48, self.mask_dim, kernel_size=1, stride=1, bias=True, D=3
-        )
+        # self.mask_features_head = conv(
+        #     48, self.mask_dim, kernel_size=1, stride=1, bias=True, D=3
+        # )
+
+        self.mask_features_head = nn.Linear(48, 128)
 
         if self.scatter_type == "mean":
             self.scatter_fn = scatter_mean
@@ -129,13 +131,21 @@ class StratifiedMask3D(nn.Module):
         else:
             assert False, 'pos enc type not known'
 
-        self.pooling = MinkowskiAvgPooling(kernel_size=2, stride=2, dimension=3)
+        self.pooling = torch.nn.AvgPool1d(kernel_size=2, stride=2)
 
         self.masked_transformer_decoder = nn.ModuleList()
         self.cross_attention = nn.ModuleList()
         self.self_attention = nn.ModuleList()
         self.ffn_attention = nn.ModuleList()
         self.lin_squeeze = nn.ModuleList()
+
+        self.projection_layers = [
+            nn.Linear(384, 128).cuda(),
+            nn.Linear(384, 128).cuda(),
+            nn.Linear(192, 128).cuda(),
+            nn.Linear(96, 128).cuda(),
+            nn.Linear(48, 128).cuda(),
+        ]
 
         num_shared = self.num_decoders if not self.shared_decoder else 1
 
@@ -200,30 +210,34 @@ class StratifiedMask3D(nn.Module):
 
     def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
         # TODO pcd_features
-        aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
-        pcd_features = aux[-1]
 
+        # import pdb
+        # pdb.set_trace()
+
+        aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
+
+        pcd_features = aux[-1][0]
         batch_size = len(offset)
 
-        with torch.no_grad():
-            coordinates = me.SparseTensor(features=pcd_features.coordinates[:, 1:] * self.voxel_size,
-                                          coordinate_manager=aux[-1].coordinate_manager,
-                                          coordinate_map_key=aux[-1].coordinate_map_key,
-                                          device=aux[-1].device)
+        # with torch.no_grad():
+        #     coordinates = me.SparseTensor(features=pcd_features.coordinates[:, 1:] * self.voxel_size,
+        #                                   coordinate_manager=aux[-1].coordinate_manager,
+        #                                   coordinate_map_key=aux[-1].coordinate_map_key,
+        #                                   device=aux[-1].device)
 
-            coords = [coordinates]
-            for _ in reversed(range(len(aux)-1)):
-                coords.append(self.pooling(coords[-1]))
+        #     coords = [coordinates]
+        #     for _ in reversed(range(len(aux)-1)):
+        #         coords.append(self.pooling(coords[-1]))
 
-            coords.reverse()
+        #     coords.reverse()
 
-        pos_encodings_pcd = self.get_pos_encs(coords)
-        mask_features = self.mask_features_head(pcd_features) # (num_voxels, D=128)
+        # pos_encodings_pcd = torch.ones_like(pcd_features)  # self.get_pos_encs(coords)
+        # mask_features = self.mask_features_head(pcd_features) # (num_voxels, D=128)
 
-        if self.train_on_segments:
-            mask_segments = []
-            for i, mask_feature in enumerate(mask_features.decomposed_features):  # batch_size
-                mask_segments.append(self.scatter_fn(mask_feature, point2segment[i], dim=0))
+        # if self.train_on_segments:
+        #     mask_segments = []
+        #     for i, mask_feature in enumerate(mask_features.decomposed_features):  # batch_size
+        #         mask_segments.append(self.scatter_fn(mask_feature, point2segment[i], dim=0))
 
         sampled_coords = None
 
@@ -278,25 +292,35 @@ class StratifiedMask3D(nn.Module):
             if self.shared_decoder:
                 decoder_counter = 0
             for i, hlevel in enumerate(self.hlevels):
-                if self.train_on_segments:
-                    output_class, outputs_mask, attn_mask = self.mask_module(queries, # 2, 100, 128
-                                                          mask_features, # num_voxels, 128
-                                                          mask_segments, # 682, 128
-                                                          len(aux) - hlevel - 1,
-                                                          ret_attn_mask=True,
-                                                          point2segment=point2segment,
-                                                          coords=coords)
-                else:
-                    output_class, outputs_mask, attn_mask = self.mask_module(queries,
-                                                          mask_features,
-                                                          None,
-                                                          len(aux) - hlevel - 1,
-                                                          ret_attn_mask=True,
-                                                          point2segment=None,
-                                                          coords=coords)
+                # if self.train_on_segments:
+                #     output_class, outputs_mask, attn_mask = self.mask_module(queries, # 2, 100, 128
+                #                                           mask_features, # num_voxels, 128
+                #                                           mask_segments, # 682, 128
+                #                                           len(aux) - hlevel - 1,
+                #                                           ret_attn_mask=True,
+                #                                           point2segment=point2segment,
+                #                                           coords=coords)
+                # else:
+                import pdb
+                pdb.set_trace()
+                mask_features = self.projection_layers[hlevel](aux[hlevel][0])
 
-                decomposed_aux = aux[hlevel].decomposed_features
-                decomposed_attn = attn_mask.decomposed_features
+                output_class, outputs_mask, attn_mask = self.mask_module(queries,
+                                                        mask_features,
+                                                        None,
+                                                        len(aux) - hlevel - 1,
+                                                        ret_attn_mask=True,
+                                                        point2segment=None,
+                                                        coords=None)
+
+                import pdb
+                pdb.set_trace()
+
+                decomposed_aux = aux[hlevel][0]
+                decomposed_attn = attn_mask
+
+                import pdb
+                pdb.set_trace()
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
 
@@ -345,9 +369,9 @@ class StratifiedMask3D(nn.Module):
                     decomposed_attn[k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])
 
-                batched_pos_enc = torch.stack([
-                    pos_encodings_pcd[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
-                ])
+                # batched_pos_enc = torch.stack([
+                #     pos_encodings_pcd[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
+                # ])
 
                 batched_attn.permute((0, 2, 1))[batched_attn.sum(1) == rand_idx[0].shape[0]] = False
 
@@ -363,7 +387,7 @@ class StratifiedMask3D(nn.Module):
                     src_pcd,
                     memory_mask=batched_attn.repeat_interleave(self.num_heads, dim=0).permute((0, 2, 1)),
                     memory_key_padding_mask=None,  # here we do not apply masking on padded region
-                    pos=batched_pos_enc.permute((1, 0, 2)),
+                    pos=None, # batched_pos_enc.permute((1, 0, 2)),
                     query_pos=query_pos
                 )
 
@@ -384,24 +408,28 @@ class StratifiedMask3D(nn.Module):
             # import pdb
             # pdb.set_trace()
 
-        if self.train_on_segments:
-            output_class, outputs_mask = self.mask_module(queries,
-                                                          mask_features,
-                                                          mask_segments,
-                                                          0,
-                                                          ret_attn_mask=False,
-                                                          point2segment=point2segment,
-                                                          coords=coords)
-        else:
-            output_class, outputs_mask = self.mask_module(queries,
-                                                          mask_features,
-                                                          None,
-                                                          0,
-                                                          ret_attn_mask=False,
-                                                          point2segment=None,
-                                                          coords=coords)
+        # if self.train_on_segments:
+        #     output_class, outputs_mask = self.mask_module(queries,
+        #                                                   mask_features,
+        #                                                   mask_segments,
+        #                                                   0,
+        #                                                   ret_attn_mask=False,
+        #                                                   point2segment=point2segment,
+        #                                                   coords=coords)
+        # else:
+            # import pdb
+            # pdb.set_trace()
+        output_class, outputs_mask = self.mask_module(queries,
+                                                        mask_features,
+                                                        None,
+                                                        0,
+                                                        ret_attn_mask=False,
+                                                        point2segment=None,
+                                                        coords=None)
         predictions_class.append(output_class)
         predictions_mask.append(outputs_mask)
+
+        print('stratified mask3d forward finished')
 
         return {
             'pred_logits': predictions_class[-1],
@@ -423,38 +451,36 @@ class StratifiedMask3D(nn.Module):
 
         # dot product of masked module to prefilter features
 
-        if point2segment is not None:
-            output_segments = []
-            for i in range(len(mask_segments)):
-                output_segments.append(mask_segments[i] @ mask_embed[i].T)
-                output_masks.append(output_segments[-1][point2segment[i]])
-        else:
-            for i in range(mask_features.C[-1, 0] + 1):
-                output_masks.append(mask_features.decomposed_features[i] @ mask_embed[i].T)
+        # if point2segment is not None:
+        #     output_segments = []
+        #     for i in range(len(mask_segments)):
+        #         output_segments.append(mask_segments[i] @ mask_embed[i].T)
+        #         output_masks.append(output_segments[-1][point2segment[i]])
+        # else:
+        # for i in range(mask_features.C[-1, 0] + 1):
+        output_masks.append(mask_features @ mask_embed.squeeze().T)
 
         output_masks = torch.cat(output_masks)
-        outputs_mask = me.SparseTensor(features=output_masks,
-                                       coordinate_manager=mask_features.coordinate_manager,
-                                       coordinate_map_key=mask_features.coordinate_map_key)
+        # outputs_mask = me.SparseTensor(features=output_masks,
+        #                                coordinate_manager=mask_features.coordinate_manager,
+        #                                coordinate_map_key=mask_features.coordinate_map_key)
 
         if ret_attn_mask:
-            attn_mask = outputs_mask
+            attn_mask = output_masks
             for _ in range(num_pooling_steps):
-                attn_mask = self.pooling(attn_mask.float())
+                attn_mask = self.pooling(attn_mask.float().T).T
 
-            attn_mask = me.SparseTensor(features=(attn_mask.F.detach().sigmoid() < 0.5),
-                                        coordinate_manager=attn_mask.coordinate_manager,
-                                        coordinate_map_key=attn_mask.coordinate_map_key)
+            attn_mask = attn_mask.detach().sigmoid() < 0.5
 
-            if point2segment is not None:
-                return outputs_class, output_segments, attn_mask
-            else:
-                return outputs_class, outputs_mask.decomposed_features, attn_mask
+            # if point2segment is not None:
+            #     return outputs_class, output_segments, attn_mask
+            # else:
+            return [outputs_class.squeeze()], [output_masks], attn_mask
 
-        if point2segment is not None:
-            return outputs_class, output_segments
-        else:
-            return outputs_class, outputs_mask.decomposed_features
+        # if point2segment is not None:
+        #     return outputs_class, output_segments
+        # else:
+        return [outputs_class.squeeze()], [output_masks]
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_seg_masks):

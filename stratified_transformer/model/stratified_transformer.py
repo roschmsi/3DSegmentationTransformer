@@ -487,18 +487,18 @@ class Stratified(nn.Module):
         quantization_mode = SparseTensorQuantizationMode.RANDOM_SUBSAMPLE # NO_QUANTIZATION
 
         # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())     
-        sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats])  
-        decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda(), quantization_mode=quantization_mode))
+        # sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats])  
+        decoder_output.append((feats.cuda(), xyz.cuda()))
 
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
 
-            voxel_size = 0.02
-            coords = torch.floor(xyz / voxel_size)
+            # voxel_size = 0.02
+            # coords = torch.floor(xyz / voxel_size)
 
-            # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
-            sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats]) 
-            decoder_output.append(ME.SparseTensor(sparse_feats.cuda(), sparse_coords.cuda(), quantization_mode=quantization_mode))
+            # # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
+            # sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats]) 
+            decoder_output.append((feats.cuda(), xyz.cuda()))
 
         # out = self.classifier(feats)
         # return out        

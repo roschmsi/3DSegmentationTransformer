@@ -97,6 +97,9 @@ class InstanceSegmentation(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
 
+        import pdb
+        pdb.set_trace()
+
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
             raise RuntimeError("BATCH TOO BIG")
@@ -136,6 +139,8 @@ class InstanceSegmentation(pl.LightningModule):
             print(f"target: {target}")
             print(f"filenames: {file_names}")
             raise val_err
+
+        print('passed self criterion in training step')
 
         for k in list(losses.keys()):
             if k in self.criterion.weight_dict:

@@ -1,7 +1,7 @@
 general:
   train_mode: true
   task: "instance_segmentation"
-  seed: null
+  seed: 42
   checkpoint: null
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer

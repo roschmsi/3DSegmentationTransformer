@@ -24,12 +24,9 @@ def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
     inputs = inputs.sigmoid()
     inputs = inputs.flatten(1)
-    print('inputs.shape:', inputs.shape)
-    print('targets.shape:', targets.shape)
     numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
     denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
-    print('loss:', loss.shape)
     return loss
 
 
@@ -98,7 +95,7 @@ class HungarianMatcher(nn.Module):
 
         self.num_points = num_points
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
         bs, num_queries = outputs["pred_logits"].shape[:2]
@@ -108,8 +105,13 @@ class HungarianMatcher(nn.Module):
 
         indices = []
 
+        print('enter matcher memory efficient forward')
+
         # Iterate through batch size
         for b in range(bs):
+
+            # import pdb
+            # pdb.set_trace()
 
             out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
             tgt_ids = targets[b]["labels"].clone()
@@ -181,7 +183,7 @@ class HungarianMatcher(nn.Module):
             for i, j in indices
         ]
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, outputs, targets, mask_type):
         """Performs the matching
 

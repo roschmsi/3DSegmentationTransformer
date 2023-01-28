@@ -360,6 +360,15 @@ class SemanticSegmentationDataset(Dataset):
             normals = normals[idx_kept]
             segments = segments[idx_kept]
             labels = labels[idx_kept]
+        mod = len(coordinates) % 5
+        if mod > 0:
+            coordinates = coordinates[:-mod]
+            color = color[:-mod]
+            normals = normals[:-mod]
+            segments = segments[:-mod]
+            labels = labels[:-mod]
+
+        assert(len(coordinates) % 5 == 0)
 
         raw_coordinates = coordinates.copy()
         raw_color = color

@@ -215,6 +215,9 @@ class Mask3D(nn.Module):
 
             coords.reverse()
 
+        # import pdb
+        # pdb.set_trace()
+
         pos_encodings_pcd = self.get_pos_encs(coords)
         mask_features = self.mask_features_head(pcd_features) # (num_voxels, D=128)
 
@@ -294,6 +297,9 @@ class Mask3D(nn.Module):
 
                 decomposed_aux = aux[hlevel].decomposed_features
                 decomposed_attn = attn_mask.decomposed_features
+
+                # import pdb
+                # pdb.set_trace()
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
 
