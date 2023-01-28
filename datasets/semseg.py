@@ -351,6 +351,16 @@ class SemanticSegmentationDataset(Dataset):
             points[:, 10:12],
         )
 
+        # random downsampling
+        # TODO set size
+        if len(coordinates) > 100000:
+            idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
+            coordinates = coordinates[idx_kept]
+            color = color[idx_kept]
+            normals = normals[idx_kept]
+            segments = segments[idx_kept]
+            labels = labels[idx_kept]
+
         raw_coordinates = coordinates.copy()
         raw_color = color
         raw_normals = normals

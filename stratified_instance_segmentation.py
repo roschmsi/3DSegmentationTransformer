@@ -26,6 +26,7 @@ def get_parameters(cfg: DictConfig):
     # getting basic configuration
     if cfg.general.get("gpus", None) is None:
         cfg.general.gpus = os.environ.get("CUDA_VISIBLE_DEVICES", None)
+    # cfg.general.gpus=None
     loggers = []
 
     # cfg.general.experiment_id = "0" # str(Repo("./").commit())[:8]

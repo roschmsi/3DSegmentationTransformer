@@ -434,12 +434,12 @@ class Stratified(nn.Module):
 
         self.upsamples = nn.ModuleList([Upsample(up_k, channels[i], channels[i-1]) for i in range(num_layers-1, 0, -1)])
         
-        self.classifier = nn.Sequential(
-            nn.Linear(channels[0], channels[0]), 
-            nn.BatchNorm1d(channels[0]), 
-            nn.ReLU(inplace=True), 
-            nn.Linear(channels[0], num_classes)
-        )
+        # self.classifier = nn.Sequential(
+        #     nn.Linear(channels[0], channels[0]), 
+        #     nn.BatchNorm1d(channels[0]), 
+        #     nn.ReLU(inplace=True), 
+        #     nn.Linear(channels[0], num_classes)
+        # )
 
         self.init_weights()
 

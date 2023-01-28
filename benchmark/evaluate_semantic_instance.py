@@ -265,7 +265,8 @@ def make_pred_info(pred: dict):
 def assign_instances_for_scan(pred: dict, gt_file: str):
     pred_info = make_pred_info(pred)
     try:
-        gt_ids = util_3d.load_ids(gt_file)
+        #TODO load gt_file with indices generated in dataset getitem
+        gt_ids = util_3d.load_ids(gt_file)[:100000]
     except Exception as e:
         util.print_error('unable to load ' + gt_file + ': ' + str(e))
 
@@ -291,6 +292,8 @@ def assign_instances_for_scan(pred: dict, gt_file: str):
         label_name = ID_TO_LABEL[label_id]
         # read the mask
         pred_mask = pred_info[uuid]['mask']
+        # import pdb
+        # pdb.set_trace()
         assert(len(pred_mask) == len(gt_ids))
         # convert to binary
         pred_mask = np.not_equal(pred_mask, 0)

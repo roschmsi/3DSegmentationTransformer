@@ -13,7 +13,7 @@ use_level_embed: false
 normalize_pos_enc: true
 positional_encoding_type: "fourier"
 gauss_scale: 1.0
-hlevels: [0,1,2]
+hlevels: [0,1,2,3]
 
 # queries
 # TODO change again
@@ -37,7 +37,7 @@ voxel_size: ${data.voxel_size}
 config:
   backbone:
     _target_: stratified_transformer.model.stratified_transformer.Stratified
-    downsample_scale: 5
+    downsample_scale: 4
     depths: [3, 3, 9, 3, 3] 
     channels: [48, 96, 192, 384, 384] 
     num_heads: [3, 6, 12, 24, 24] 
@@ -51,7 +51,7 @@ config:
     drop_path_rate: 0.3
     num_layers: 5
     concat_xyz: True
-    num_classes: 13 ## why
+    num_classes: 20
     ratio: 0.25
     k: 16
     prev_grid_size: 0.04

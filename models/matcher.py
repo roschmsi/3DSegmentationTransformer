@@ -24,9 +24,12 @@ def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
     inputs = inputs.sigmoid()
     inputs = inputs.flatten(1)
+    print('inputs.shape:', inputs.shape)
+    print('targets.shape:', targets.shape)
     numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
     denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
+    print('loss:', loss.shape)
     return loss
 
 
@@ -54,6 +57,9 @@ def batch_sigmoid_ce_loss(inputs: torch.Tensor, targets: torch.Tensor):
     neg = F.binary_cross_entropy_with_logits(
         inputs, torch.zeros_like(inputs), reduction="none"
     )
+
+    # print('pos:', pos.shape)
+    # print('targets:', targets.shape)
 
     loss = torch.einsum("nc,mc->nm", pos, targets) + torch.einsum(
         "nc,mc->nm", neg, (1 - targets)
@@ -96,6 +102,9 @@ class HungarianMatcher(nn.Module):
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
         bs, num_queries = outputs["pred_logits"].shape[:2]
+
+        # import pdb
+        # pdb.set_trace()
 
         indices = []
 
@@ -160,6 +169,9 @@ class HungarianMatcher(nn.Module):
                 + self.cost_class * cost_class
                 + self.cost_dice * cost_dice
             )
+
+            print('cost matrix:', C.shape)
+
             C = C.reshape(num_queries, -1).cpu()
 
             indices.append(linear_sum_assignment(C))

@@ -981,6 +981,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         # misc
         self.labels_info = dict()
 
+        # self.device = torch.device('cuda:0') if config.general.gpus is not None else torch.device('cpu')
+
     def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
         with self.optional_freeze():
             x = self.model(feat, coord, offset, batch, neighbor_idx, point2segment, raw_coordinates=raw_coordinates,
@@ -989,6 +991,9 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
+
+        # import pdb
+        # pdb.set_trace()
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -1009,8 +1014,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         # prepare mask3d data for stratified transformer ##############################################################
 
-        import pdb
-        pdb.set_trace()
+        # import pdb
+        # pdb.set_trace()
 
         offset = torch.IntTensor([len(data.original_coordinates[0])])
         offset_ = offset.clone()

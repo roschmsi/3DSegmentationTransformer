@@ -358,7 +358,7 @@ class StratifiedMask3D(nn.Module):
                 if self.use_level_embed:
                     src_pcd += self.level_embed.weight[i]
 
-                output = self.cross_attention[decoder_counter][i](
+                output, cross_attention_masks = self.cross_attention[decoder_counter][i](
                     queries.permute((1, 0, 2)),
                     src_pcd,
                     memory_mask=batched_attn.repeat_interleave(self.num_heads, dim=0).permute((0, 2, 1)),
