@@ -24,7 +24,8 @@ random_queries: true
 use_np_features: false
 
 # sampling
-sample_sizes: [200, 800, 3200, 12800, 51200]
+# sample_sizes: [200, 800, 3200, 12800, 51200]
+sample_sizes: [391, 1563, 6251, 25001, 100000]
 max_sample_size: false # change false means sampling activated
 
 shared_decoder: true

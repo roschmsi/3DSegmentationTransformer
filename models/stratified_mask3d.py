@@ -211,8 +211,7 @@ class StratifiedMask3D(nn.Module):
     def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
         # TODO pcd_features
 
-        # import pdb
-        # pdb.set_trace()
+        
 
         aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
 
@@ -301,8 +300,6 @@ class StratifiedMask3D(nn.Module):
                 #                                           point2segment=point2segment,
                 #                                           coords=coords)
                 # else:
-                import pdb
-                pdb.set_trace()
                 mask_features = self.projection_layers[hlevel](aux[hlevel][0])
 
                 output_class, outputs_mask, attn_mask = self.mask_module(queries,
@@ -313,14 +310,10 @@ class StratifiedMask3D(nn.Module):
                                                         point2segment=None,
                                                         coords=None)
 
-                import pdb
-                pdb.set_trace()
 
-                decomposed_aux = aux[hlevel][0]
-                decomposed_attn = attn_mask
+                decomposed_aux = aux[hlevel][0].unsqueeze(0)
 
-                import pdb
-                pdb.set_trace()
+                decomposed_attn = attn_mask.unsqueeze(0)
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
 
@@ -419,6 +412,7 @@ class StratifiedMask3D(nn.Module):
         # else:
             # import pdb
             # pdb.set_trace()
+        mask_features = self.projection_layers[-1](aux[-1][0])
         output_class, outputs_mask = self.mask_module(queries,
                                                         mask_features,
                                                         None,
@@ -430,10 +424,10 @@ class StratifiedMask3D(nn.Module):
         predictions_mask.append(outputs_mask)
 
         print('stratified mask3d forward finished')
-
+        # breakpoint()
         return {
-            'pred_logits': predictions_class[-1],
-            'pred_masks': predictions_mask[-1],
+            'pred_logits': torch.stack(predictions_class[-1]),
+            'pred_masks': torch.stack(predictions_mask[-1]),
             'aux_outputs': self._set_aux_loss(
                 predictions_class, predictions_mask
             ),
@@ -467,8 +461,8 @@ class StratifiedMask3D(nn.Module):
 
         if ret_attn_mask:
             attn_mask = output_masks
-            for _ in range(num_pooling_steps):
-                attn_mask = self.pooling(attn_mask.float().T).T
+            # for _ in range(num_pooling_steps):
+            #     attn_mask = self.pooling(attn_mask.float().T).T
 
             attn_mask = attn_mask.detach().sigmoid() < 0.5
 

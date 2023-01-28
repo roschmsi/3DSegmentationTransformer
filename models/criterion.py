@@ -130,6 +130,7 @@ class SetCriterion(nn.Module):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
+        # breakpoint()
         assert "pred_logits" in outputs
         src_logits = outputs["pred_logits"].float()
 
@@ -254,6 +255,9 @@ class SetCriterion(nn.Module):
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
 
+        for i in range(len(targets)):
+            targets[i]['masks'] = targets[i]['masks'].cuda()
+            targets[i]['labels'] = targets[i]['labels'].cuda()
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
 
         print('before matcher in set criterion forward')
@@ -280,13 +284,15 @@ class SetCriterion(nn.Module):
             losses.update(self.get_loss(loss, outputs, targets, indices, num_masks, mask_type))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if "aux_outputs" in outputs:
-            for i, aux_outputs in enumerate(outputs["aux_outputs"]):
-                indices = self.matcher(aux_outputs, targets, mask_type)
-                for loss in self.losses:
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks, mask_type)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
-                    losses.update(l_dict)
+        
+        # TODO: fix aux_outputs and associated loss
+        # if "aux_outputs" in outputs:
+        #     for i, aux_outputs in enumerate(outputs["aux_outputs"]):
+        #         indices = self.matcher(aux_outputs, targets, mask_type)
+        #         for loss in self.losses:
+        #             l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks, mask_type)
+        #             l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
+        #             losses.update(l_dict)
 
         return losses
 

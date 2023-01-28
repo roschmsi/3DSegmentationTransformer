@@ -408,13 +408,13 @@ def get_instance_masks(list_labels, task, list_segments=None, ignore_class_thres
 
             if list_segments:
                 target.append({
-                    'labels': l,
+                    'labels': l.to(torch.int64),
                     'masks': masks,
                     'segment_mask': segment_masks
                 })
             else:
                 target.append({
-                    'labels': l,
+                    'labels': l.to(torch.int64),
                     'masks': masks
                 })
     return target

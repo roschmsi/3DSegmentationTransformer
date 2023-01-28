@@ -422,7 +422,7 @@ class InstanceSegmentation(pl.LightningModule):
             pca_features = pca.transform(backbone_features)
             rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
 
-        self.eval_instance_step(output, target, target_full, inverse_maps, file_names, original_coordinates,
+        self.eval_instance_step(output, target_full, target_full, inverse_maps, file_names, original_coordinates, #target
                                 original_colors, original_normals, raw_coordinates, data_idx,
                                 backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
 
@@ -997,8 +997,6 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
 
-        # import pdb
-        # pdb.set_trace()
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -1256,6 +1254,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         v.save(f"{self.config['general']['save_dir']}/visualizations/{file_name}")
 
     def eval_step(self, batch, batch_idx):
+        # breakpoint()
         data, target, file_names = batch
         inverse_maps = data.inverse_maps
         target_full = data.target_full
@@ -1326,7 +1325,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 torch.use_deterministic_algorithms(False)
 
             try:
-                losses = self.criterion(output, target,
+                losses = self.criterion(output, target_full, #target
                                         mask_type=self.mask_type)
             except ValueError as val_err:
                 print(f"ValueError: {val_err}")

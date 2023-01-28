@@ -95,7 +95,7 @@ class HungarianMatcher(nn.Module):
 
         self.num_points = num_points
 
-    # @torch.no_grad()
+    @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
         bs, num_queries = outputs["pred_logits"].shape[:2]
@@ -110,8 +110,7 @@ class HungarianMatcher(nn.Module):
         # Iterate through batch size
         for b in range(bs):
 
-            # import pdb
-            # pdb.set_trace()
+            # breakpoint()
 
             out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
             tgt_ids = targets[b]["labels"].clone()
@@ -155,7 +154,7 @@ class HungarianMatcher(nn.Module):
 
             # import pdb
             # pdb.set_trace()
-
+            # breakpoint()
             with autocast(enabled=False):
                 out_mask = out_mask.float()
                 tgt_mask = tgt_mask.float()
@@ -173,7 +172,7 @@ class HungarianMatcher(nn.Module):
             )
 
             print('cost matrix:', C.shape)
-
+            # breakpoint()
             C = C.reshape(num_queries, -1).cpu()
 
             indices.append(linear_sum_assignment(C))
@@ -183,7 +182,7 @@ class HungarianMatcher(nn.Module):
             for i, j in indices
         ]
 
-    # @torch.no_grad()
+    @torch.no_grad()
     def forward(self, outputs, targets, mask_type):
         """Performs the matching
 
