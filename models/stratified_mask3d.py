@@ -383,7 +383,6 @@ class StratifiedMask3D(nn.Module):
 
             # import pdb
             # pdb.set_trace()
-
         if self.train_on_segments:
             output_class, outputs_mask = self.mask_module(queries,
                                                           mask_features,

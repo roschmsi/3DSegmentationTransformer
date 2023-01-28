@@ -24,12 +24,9 @@ def batch_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
     inputs = inputs.sigmoid()
     inputs = inputs.flatten(1)
-    print('inputs.shape:', inputs.shape)
-    print('targets.shape:', targets.shape)
     numerator = 2 * torch.einsum("nc,mc->nm", inputs, targets)
     denominator = inputs.sum(-1)[:, None] + targets.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
-    print('loss:', loss.shape)
     return loss
 
 
@@ -125,6 +122,14 @@ class HungarianMatcher(nn.Module):
             out_mask = outputs['pred_masks'][b].T  # [num_queries, H_pred, W_pred]
             # gt masks are already padded when preparing target
             tgt_mask = targets[b][mask_type].to(out_mask)
+            
+            print(f"matcher out_mask:{out_mask.shape}, tgt_mask:{tgt_mask.shape}")
+            #TODO: remove this hackc
+            # mask_trim = out_mask.shape[1]%5
+            # if mask_trim!=0:
+            #     out_mask = out_mask[:,:-mask_trim]
+            #     tgt_mask = tgt_mask[:,:out_mask.shape[1]]
+            #     print(f" after trim: matcher out_mask:{out_mask.shape}, tgt_mask:{tgt_mask.shape}")
 
             if self.num_points != -1:
                 point_idx = torch.randperm(tgt_mask.shape[1],

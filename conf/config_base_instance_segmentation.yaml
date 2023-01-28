@@ -1,7 +1,7 @@
 general:
   train_mode: true
   task: "instance_segmentation"
-  seed: null
+  seed: 42
   checkpoint: null
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer
@@ -46,8 +46,8 @@ general:
   save_dir: saved/${general.experiment_name}
   # time/commit/md5(config)_uuid
   # time/experiment_id/version_uuid
-  # experiment_id: 1 # commit[:8], or unique from logger
-  # version: 1 # md5[:8] of config
+  experiment_id: "1" # commit[:8], or unique from logger
+  version: 1 # md5[:8] of config
 
   gpus: 1
 
@@ -56,7 +56,7 @@ defaults:
   - data/data_loaders: simple_loader
   - data/datasets: scannet
   - data/collation_functions: voxelize_collate
-  - logging: full
+  - logging: minimal
   - model: mask3d
   - metrics: miou
   - optimizer: adamw
