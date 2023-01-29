@@ -3,7 +3,7 @@ general:
   task: "instance_segmentation"
   seed: 42
   checkpoint: null
-  backbone_checkpoint: null
+  backbone_checkpoint: scannet_model_best.pth
   freeze_backbone: false # train only last layer
   linear_probing_backbone: false
   train_on_segments: false

@@ -39,39 +39,62 @@ def load_baseline_model(cfg, model):
 
 def load_backbone_checkpoint_with_missing_or_exsessive_keys(cfg, model):
     state_dict = torch.load(cfg.general.backbone_checkpoint)["state_dict"]
-    correct_dict = dict(model.state_dict())
-
-    # if parametrs not found in checkpoint they will be randomly initialized
+    # remove 'module.' prefix and fix stem layer
+    state_dict_renamed = {}
     for key in state_dict.keys():
-        if correct_dict.pop(f"model.backbone.{key}", None) is None:
-            logger.warning(f"Key not found, it will be initialized randomly: {key}")
+        new_key = key.replace("module","model.backbone")
+        if "classifier" in new_key:
+            continue
+        if "item_layer" in new_key:
+            new_key = new_key.replace("item_layer", "stem_layer")
+        state_dict_renamed[new_key] = state_dict[key]
+    
+    state_dict = state_dict_renamed
+
+    correct_dict = dict(model.state_dict())
+    # unfound_backbone_keys = [k for k in correct_dict.keys() if (k.startswith("model.backbone") and (k not in state_dict))]
+    unfound_keys = [k for k in correct_dict.keys() if k not in state_dict] #mask3d keys
+    excess_keys =  [k for k in state_dict.keys() if k not in correct_dict]
+    for key in unfound_keys:
+        state_dict[key] = correct_dict[key]
+    
+    
+    
+    # count = 0
+    # # if parametrs not found in checkpoint they will be randomly initialized
+    # for key in state_dict.keys():
+    #     if correct_dict.pop(f"model.backbone.{key}", None) is None:
+    #         logger.warning(f"Key not found, it will be initialized randomly: {key}")
+    #         continue
+    #     count+=1
+    # print(f"{count}/{len(state_dict.keys())} keys match")
 
     # if parametrs have different shape, it will randomly initialize
-    state_dict = torch.load(cfg.general.backbone_checkpoint)["state_dict"]
-    correct_dict = dict(model.state_dict())
-    for key in correct_dict.keys():
-        if key.replace("model.backbone.", "") not in state_dict:
-            logger.warning(
-                f"{key} not in loaded checkpoint"
-            )
-            state_dict.update({key.replace("model.backbone.", ""): correct_dict[key]})
-        elif state_dict[key.replace("model.backbone.", "")].shape != correct_dict[key].shape:
-            logger.warning(
-                f"incorrect shape {key}:{state_dict[key.replace('model.backbone.', '')].shape} vs {correct_dict[key].shape}"
-            )
-            state_dict.update({key: correct_dict[key]})
+    # state_dict = torch.load(cfg.general.backbone_checkpoint)["state_dict"]
+    # correct_dict = dict(model.state_dict())
+    # for key in correct_dict.keys():
+    #     if key.replace("model.backbone.", "") not in state_dict: #mask3d keys
+    #         logger.warning(
+    #             f"{key} not in loaded checkpoint"
+    #         )
+    #         state_dict.update({key.replace("model.backbone.", ""): correct_dict[key]}) #random initialization
+    #     elif state_dict[key.replace("model.backbone.", "")].shape != correct_dict[key].shape:
+    #         logger.warning(
+    #             f"incorrect shape {key}:{state_dict[key.replace('model.backbone.', '')].shape} vs {correct_dict[key].shape}"
+    #         )
+    #         state_dict.update({key: correct_dict[key]})
 
-    # if we have more keys just discard them
-    correct_dict = dict(model.state_dict())
-    new_state_dict = dict()
-    for key in state_dict.keys():
-        if f"model.backbone.{key}" in correct_dict.keys():
-            new_state_dict.update({f"model.backbone.{key}": state_dict[key]})
-        elif key in correct_dict.keys():
-            new_state_dict.update({key: correct_dict[key]})
-        else:
-            logger.warning(f"excessive key: {key}")
-    model.load_state_dict(new_state_dict)
+    # # if we have more keys just discard them
+    # # correct_dict = dict(model.state_dict())
+    # new_state_dict = dict()
+    # for key in state_dict.keys():
+    #     if f"model.backbone.{key}" in correct_dict.keys():
+    #         new_state_dict.update({f"model.backbone.{key}": state_dict[key]})
+    #     elif key in correct_dict.keys():
+    #         new_state_dict.update({key: correct_dict[key]})
+    #     else:
+    #         logger.warning(f"excessive key: {key}")
+    model.load_state_dict(state_dict)
     return cfg, model
 
 def load_checkpoint_with_missing_or_exsessive_keys(cfg, model):
@@ -108,7 +131,6 @@ def load_checkpoint_with_missing_or_exsessive_keys(cfg, model):
             logger.warning(f"excessive key: {key}")
     model.load_state_dict(new_state_dict)
     return cfg, model
-
 
 def freeze_until(net, param_name: str = None):
     """
