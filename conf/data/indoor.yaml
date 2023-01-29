@@ -5,7 +5,7 @@
 
 # splits
 train_mode: train
-validation_mode: validation
+validation_mode: validation #validation
 test_mode: validation # test  # validation
 
 # dataset
@@ -41,3 +41,5 @@ cropping_args:
 crop_min_size: 20000
 crop_length: 6.0
 cropping_v1: true
+
+debug: true

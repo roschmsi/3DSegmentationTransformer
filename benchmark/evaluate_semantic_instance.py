@@ -267,9 +267,9 @@ def assign_instances_for_scan(pred: dict, gt_file: str):
     try:
         #TODO load gt_file with indices generated in dataset getitem
         gt_ids = util_3d.load_ids(gt_file)  # [:100000]
-        mod = len(gt_ids) % 5
-        if mod > 0:
-            gt_ids = gt_ids[:-mod]
+        # mod = len(gt_ids) % 5
+        # if mod > 0:
+        #     gt_ids = gt_ids[:-mod]
     except Exception as e:
         util.print_error('unable to load ' + gt_file + ': ' + str(e))
 

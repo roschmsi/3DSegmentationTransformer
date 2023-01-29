@@ -985,6 +985,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         self.iou = IoU()
         # misc
         self.labels_info = dict()
+        self.debug = config.data.debug
 
         # self.device = torch.device('cuda:0') if config.general.gpus is not None else torch.device('cpu')
 
@@ -995,8 +996,9 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         return x
 
     def training_step(self, batch, batch_idx):
+        
         data, target, file_names = batch
-
+        # breakpoint()
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -1671,9 +1673,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         root_path = f"eval_output"
         base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}"
-
+        file_mode = self.validation_dataset.mode
+        if self.debug:
+            file_mode = "train"
         if self.validation_dataset.dataset_name in ["scannet", "stpls3d", "scannet200"]:
-            gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/{self.validation_dataset.mode}"
+            gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/{file_mode}"
         else:
             gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/Area_{self.config.general.area}"
 

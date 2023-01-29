@@ -289,6 +289,7 @@ class SetCriterion(nn.Module):
         # pdb.set_trace()
         
         # # TODO: fix aux_outputs and associated loss
+        # breakpoint()
         # if "aux_outputs" in outputs:
         #     for i, aux_outputs in enumerate(outputs["aux_outputs"]):
         #         indices = self.matcher(aux_outputs, targets, mask_type)
@@ -296,7 +297,8 @@ class SetCriterion(nn.Module):
         #             l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_masks, mask_type)
         #             l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
         #             losses.update(l_dict)
-
+        # 1. create masks from downsampled labels
+        # 2. don't use auxiliary use 
         return losses
 
     def __repr__(self):

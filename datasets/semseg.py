@@ -73,7 +73,8 @@ class SemanticSegmentationDataset(Dataset):
         label_offset=0,
         add_clip=False,
         is_elastic_distortion=True,
-        color_drop=0.0
+        color_drop=0.0,
+        debug=False
     ):
         assert task in ["instance_segmentation", "semantic_segmentation"], "unknown task"
 
@@ -168,6 +169,10 @@ class SemanticSegmentationDataset(Dataset):
         self.flip_in_center = flip_in_center
         self.noise_rate = noise_rate
         self.resample_points = resample_points
+
+        self.debug = debug
+        if self.debug:
+            mode = "train"
 
         # loading database files
         self._data = []
@@ -323,6 +328,8 @@ class SemanticSegmentationDataset(Dataset):
         return torch.tensor(output_colors)
 
     def __len__(self):
+        # return len(self.data)
+        # TODO: figure out correct usage
         if self.is_tta:
             return 5*len(self.data)
         else:
@@ -352,22 +359,14 @@ class SemanticSegmentationDataset(Dataset):
         )
 
         # random downsampling
-        # TODO set size
-        if len(coordinates) > 100000 and "train" in self.mode:
-            idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
-            coordinates = coordinates[idx_kept]
-            color = color[idx_kept]
-            normals = normals[idx_kept]
-            segments = segments[idx_kept]
-            labels = labels[idx_kept]
-        # mod = len(coordinates) % 5
-        # if mod > 0:
-        #     coordinates = coordinates[:-mod]
-        #     color = color[:-mod]
-        #     normals = normals[:-mod]
-        #     segments = segments[:-mod]
-        #     labels = labels[:-mod]
-        # assert(len(coordinates) % 5 == 0)
+        # TODO disable for overfit, enable for full training
+        # if len(coordinates) > 100000 and "train" in self.mode:
+        #     idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
+        #     coordinates = coordinates[idx_kept]
+        #     color = color[idx_kept]
+        #     normals = normals[idx_kept]
+        #     segments = segments[idx_kept]
+        #     labels = labels[idx_kept]
 
         raw_coordinates = coordinates.copy()
         raw_color = color
@@ -377,7 +376,8 @@ class SemanticSegmentationDataset(Dataset):
             color = np.ones((len(color), 3))
 
         # volume and image augmentations for train
-        if "train" in self.mode or self.is_tta:
+        
+        if not self.debug and ("train" in self.mode or self.is_tta):
             if self.cropping:
                 new_idx = self.random_cuboid(coordinates, labels[:,1],
                                              self._remap_from_zero(labels[:, 0].copy()))
@@ -545,6 +545,8 @@ class SemanticSegmentationDataset(Dataset):
                 # taking only first column, which is segmentation label, not instance
                 labels = labels[:, 0].flatten()[..., None]
 
+        
+        
         labels = np.hstack((labels, segments[..., None].astype(np.int32)))
 
         features = color
@@ -578,7 +580,10 @@ class SemanticSegmentationDataset(Dataset):
     def data(self):
         """ database file containing information about preproscessed dataset """
         # return self._data[:309] + self._data[310:883] + self._data[884:1108] + self._data[1109:]
+        if self.debug:
+            return self._data[:1]
         return self._data
+
 
     @property
     def label_info(self):

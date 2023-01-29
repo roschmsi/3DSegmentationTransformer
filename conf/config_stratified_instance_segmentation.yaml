@@ -59,11 +59,11 @@ defaults:
   - data/data_loaders: simple_loader
   - data/datasets: scannet
   - data/collation_functions: voxelize_collate
-  - logging: minimal
+  - logging: offline
   - model: stratified_mask3d
   - metrics: miou
   - optimizer: adamw
-  - scheduler: onecyclelr
+  - scheduler: lambdalr # onecyclelr
   - trainer: trainer600
   - callbacks: callbacks_instance_segmentation
   - matcher: hungarian_matcher

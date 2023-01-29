@@ -31,6 +31,7 @@ train_dataset:
   crop_length: ${data.crop_length}
   filter_out_classes: [0, 1]
   label_offset: 2
+  debug: ${data.debug}
 
 validation_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
@@ -54,6 +55,7 @@ validation_dataset:
   crop_length: ${data.crop_length}
   filter_out_classes: [0, 1]
   label_offset: 2
+  debug: ${data.debug}
 
 test_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
