@@ -266,7 +266,7 @@ def assign_instances_for_scan(pred: dict, gt_file: str):
     pred_info = make_pred_info(pred)
     try:
         #TODO load gt_file with indices generated in dataset getitem
-        gt_ids = util_3d.load_ids(gt_file)[:100000]
+        gt_ids = util_3d.load_ids(gt_file)  # [:100000]
         mod = len(gt_ids) % 5
         if mod > 0:
             gt_ids = gt_ids[:-mod]

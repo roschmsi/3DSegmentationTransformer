@@ -353,22 +353,21 @@ class SemanticSegmentationDataset(Dataset):
 
         # random downsampling
         # TODO set size
-        if len(coordinates) > 100000:
+        if len(coordinates) > 100000 and "train" in self.mode:
             idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
             coordinates = coordinates[idx_kept]
             color = color[idx_kept]
             normals = normals[idx_kept]
             segments = segments[idx_kept]
             labels = labels[idx_kept]
-        mod = len(coordinates) % 5
-        if mod > 0:
-            coordinates = coordinates[:-mod]
-            color = color[:-mod]
-            normals = normals[:-mod]
-            segments = segments[:-mod]
-            labels = labels[:-mod]
-
-        assert(len(coordinates) % 5 == 0)
+        # mod = len(coordinates) % 5
+        # if mod > 0:
+        #     coordinates = coordinates[:-mod]
+        #     color = color[:-mod]
+        #     normals = normals[:-mod]
+        #     segments = segments[:-mod]
+        #     labels = labels[:-mod]
+        # assert(len(coordinates) % 5 == 0)
 
         raw_coordinates = coordinates.copy()
         raw_color = color
@@ -578,6 +577,7 @@ class SemanticSegmentationDataset(Dataset):
     @property
     def data(self):
         """ database file containing information about preproscessed dataset """
+        # return self._data[:309] + self._data[310:883] + self._data[884:1108] + self._data[1109:]
         return self._data
 
     @property

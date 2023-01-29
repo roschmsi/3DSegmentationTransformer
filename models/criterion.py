@@ -260,12 +260,12 @@ class SetCriterion(nn.Module):
             targets[i]['labels'] = targets[i]['labels'].cuda()
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
 
-        print('before matcher in set criterion forward')
+        # print('before matcher in set criterion forward')
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets, mask_type)
 
-        print('after matcher in set criterion forward')
+        # print('after matcher in set criterion forward')
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_masks = sum(len(t["labels"]) for t in targets)
@@ -276,7 +276,7 @@ class SetCriterion(nn.Module):
             torch.distributed.all_reduce(num_masks)
         num_masks = torch.clamp(num_masks / get_world_size(), min=1).item()
 
-        print('before computing requested losses in set criterion forward')
+        # print('before computing requested losses in set criterion forward')
 
         # Compute all the requested losses
         losses = {}
@@ -284,8 +284,11 @@ class SetCriterion(nn.Module):
             losses.update(self.get_loss(loss, outputs, targets, indices, num_masks, mask_type))
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+
+        # import pdb
+        # pdb.set_trace()
         
-        # TODO: fix aux_outputs and associated loss
+        # # TODO: fix aux_outputs and associated loss
         # if "aux_outputs" in outputs:
         #     for i, aux_outputs in enumerate(outputs["aux_outputs"]):
         #         indices = self.matcher(aux_outputs, targets, mask_type)

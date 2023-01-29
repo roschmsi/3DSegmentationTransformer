@@ -105,7 +105,7 @@ class HungarianMatcher(nn.Module):
 
         indices = []
 
-        print('enter matcher memory efficient forward')
+        # print('enter matcher memory efficient forward')
 
         # Iterate through batch size
         for b in range(bs):
@@ -171,7 +171,7 @@ class HungarianMatcher(nn.Module):
                 + self.cost_dice * cost_dice
             )
 
-            print('cost matrix:', C.shape)
+            # print('cost matrix:', C.shape)
             # breakpoint()
             C = C.reshape(num_queries, -1).cpu()
 

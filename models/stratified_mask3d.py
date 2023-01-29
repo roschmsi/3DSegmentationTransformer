@@ -423,8 +423,9 @@ class StratifiedMask3D(nn.Module):
         predictions_class.append(output_class)
         predictions_mask.append(outputs_mask)
 
-        print('stratified mask3d forward finished')
+        # print('stratified mask3d forward finished')
         # breakpoint()
+
         return {
             'pred_logits': torch.stack(predictions_class[-1]),
             'pred_masks': torch.stack(predictions_mask[-1]),
