@@ -44,8 +44,8 @@ config:
     num_heads: [3, 6, 12, 24, 24] 
     window_size: 5
     up_k: 3
-    grid_sizes: 0.02
-    quant_sizes: 0.005
+    grid_size: 0.02
+    quant_size: 0.005
     rel_query: True
     rel_key: True
     rel_value: True
@@ -59,4 +59,3 @@ config:
     sigma: 1.0
     stem_transformer: False
     patch_size: 1
-

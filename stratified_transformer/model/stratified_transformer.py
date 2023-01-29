@@ -402,14 +402,14 @@ class KPConvResBlock(nn.Module):
 
 class Stratified(nn.Module):
     def __init__(self, downsample_scale, depths, channels, num_heads, window_size, up_k, \
-            grid_sizes, quant_sizes, rel_query=True, rel_key=False, rel_value=False, drop_path_rate=0.2, \
+            grid_size, quant_size, rel_query=True, rel_key=False, rel_value=False, drop_path_rate=0.2, \
             num_layers=4, concat_xyz=False, num_classes=13, ratio=0.25, k=16, prev_grid_size=0.04, sigma=1.0, stem_transformer=False, patch_size=1):
         super().__init__()
 
-        patch_size = grid_sizes * patch_size
+        patch_size = grid_size * patch_size
         window_size = [patch_size * window_size * (2**i) for i in range(num_layers)]
         grid_sizes = [patch_size * (2**i) for i in range(num_layers)]
-        quant_sizes = [quant_sizes * (2**i) for i in range(num_layers)]
+        quant_sizes = [quant_size * (2**i) for i in range(num_layers)]
 
         
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule

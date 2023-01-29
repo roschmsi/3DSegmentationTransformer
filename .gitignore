@@ -172,3 +172,4 @@ cython_debug/
 scannet_val.ckpt
 
 *.pth
+mask3d_scannet_val.ckpt
