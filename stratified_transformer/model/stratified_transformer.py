@@ -96,7 +96,7 @@ class TransitionDown(nn.Module):
         self.linear = nn.Linear(in_channels, out_channels, bias=False)
         self.pool = nn.MaxPool1d(k)
 
-    def forward(self, feats, xyz, offset):
+    def forward(self, feats, xyz, offset, masks):
 
         n_offset, count = [int(offset[0].item()*self.ratio)+1], int(offset[0].item()*self.ratio)+1
         for i in range(1, offset.shape[0]):
@@ -106,12 +106,14 @@ class TransitionDown(nn.Module):
         idx = pointops.furthestsampling(xyz, offset, n_offset)  # (m)
         n_xyz = xyz[idx.long(), :]  # (m, 3)
 
+        masks = masks[idx.long(), :]
+
         feats = pointops.queryandgroup(self.k, xyz, n_xyz, feats, None, offset, n_offset, use_xyz=False)  # (m, nsample, 3+c)
         m, k, c = feats.shape
         feats = self.linear(self.norm(feats.view(m*k, c)).view(m, k, c)).transpose(1, 2).contiguous()
         feats = self.pool(feats).squeeze(-1)  # (m, c)
         
-        return feats, n_xyz, n_offset
+        return feats, n_xyz, n_offset, masks
 
 
 class WindowAttention(nn.Module):
@@ -273,7 +275,7 @@ class BasicLayer(nn.Module):
 
         self.downsample = downsample(channel, out_channels, ratio, k) if downsample else None
 
-    def forward(self, feats, xyz, offset):
+    def forward(self, feats, xyz, offset, masks):
         # feats: N, C
         # xyz: N, 3
         
@@ -328,11 +330,11 @@ class BasicLayer(nn.Module):
             feats = blk(feats, xyz, index_0, index_1, index_0_offsets, n_max)
             
         if self.downsample:
-            feats_down, xyz_down, offset_down = self.downsample(feats, xyz, offset)
+            feats_down, xyz_down, offset_down, masks_down = self.downsample(feats, xyz, offset, masks)
         else:
-            feats_down, xyz_down, offset_down = None, None, None
+            feats_down, xyz_down, offset_down, masks_down = None, None, None, None
             
-        return feats, xyz, offset, feats_down, xyz_down, offset_down
+        return feats, xyz, offset, masks, feats_down, xyz_down, offset_down, masks_down
 
 
 class Upsample(nn.Module):
@@ -443,11 +445,12 @@ class Stratified(nn.Module):
 
         self.init_weights()
 
-    def forward(self, feats, xyz, offset, batch, neighbor_idx):
+    def forward(self, feats, xyz, offset, batch, neighbor_idx, masks):
 
         feats_stack = []
         xyz_stack = []
         offset_stack = []
+        masks_stack = []
 
         # feats (N, 6)
 
@@ -462,49 +465,44 @@ class Stratified(nn.Module):
             feats_stack.append(feats)
             xyz_stack.append(xyz)
             offset_stack.append(offset)
-            feats, xyz, offset = self.downsample(feats, xyz, offset)
+            masks_stack.append(masks)
+            feats, xyz, offset, masks = self.downsample(feats, xyz, offset, masks)
 
         for i, layer in enumerate(self.layers):
-            feats, xyz, offset, feats_down, xyz_down, offset_down = layer(feats, xyz, offset)
+            feats, xyz, offset, masks, feats_down, xyz_down, offset_down, masks_down = layer(feats, xyz, offset, masks)
 
             feats_stack.append(feats)
             xyz_stack.append(xyz)
             offset_stack.append(offset)
+            masks_stack.append(masks)
 
             feats = feats_down
             xyz = xyz_down
             offset = offset_down
+            masks = masks_down
 
         feats = feats_stack.pop()
         xyz = xyz_stack.pop()
         offset = offset_stack.pop()
 
+        # get_instance_masks(list_labels,
+        #                                     list_segments=input_dict["segment2label"],
+        #                                     task=task,
+        #                                     ignore_class_threshold=ignore_class_threshold,
+        #                                     filter_out_classes=filter_out_classes,
+        #                                     label_offset=label_offset)
+
         decoder_output = []
 
-        voxel_size = 0.02
-        coords = torch.floor(xyz / voxel_size)
+        breakpoint()
 
-        quantization_mode = SparseTensorQuantizationMode.RANDOM_SUBSAMPLE # NO_QUANTIZATION
 
-        # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())     
-        # sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats])  
-        decoder_output.append((feats.cuda(), xyz.cuda()))
+        decoder_output.append((feats.cuda(), xyz.cuda(), masks_stack.pop().cuda()))
 
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
+            decoder_output.append((feats.cuda(), xyz.cuda(), masks_stack.pop().cuda()))
 
-            # voxel_size = 0.02
-            # coords = torch.floor(xyz / voxel_size)
-
-            # # sparse_coords, sparse_feats = ME.utils.sparse_quantize(coords.cuda(), feats.cuda())   
-            # sparse_coords, sparse_feats = ME.utils.sparse_collate([coords], [feats]) 
-            decoder_output.append((feats.cuda(), xyz.cuda()))
-
-        # out = self.classifier(feats)
-        # return out        
-
-        # actually required: pdc_feats, aux
-        # aux as sparse tensors
         return decoder_output
 
     def init_weights(self):

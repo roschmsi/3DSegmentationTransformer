@@ -208,12 +208,11 @@ class StratifiedMask3D(nn.Module):
 
         return pos_encodings_pcd
 
-    def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
+    def forward(self, feat, coord, offset, batch, neighbor_idx, masks, point2segment=None, raw_coordinates=None, is_eval=False):
         # TODO pcd_features
+        # breakpoint()
 
-        
-
-        aux = self.backbone(feat, coord, offset, batch, neighbor_idx)  # (num_voxels, 96)
+        aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
 
         pcd_features = aux[-1][0]
         batch_size = len(offset)
@@ -424,7 +423,7 @@ class StratifiedMask3D(nn.Module):
         predictions_mask.append(outputs_mask)
 
         # print('stratified mask3d forward finished')
-        # breakpoint()
+        breakpoint()
 
         return {
             'pred_logits': torch.stack(predictions_class[-1]),

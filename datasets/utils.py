@@ -306,14 +306,14 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
                                             label_offset=label_offset)
                 for i in range(len(target)):
                     target[i]["point2segment"] = input_dict["labels"][i][:, 2]
-                if "train" not in mode:
-                    target_full = get_instance_masks([torch.from_numpy(l) for l in original_labels],
-                                                     task=task,
-                                                     ignore_class_threshold=ignore_class_threshold,
-                                                     filter_out_classes=filter_out_classes,
-                                                     label_offset=label_offset)
-                    for i in range(len(target_full)):
-                        target_full[i]["point2segment"] = torch.from_numpy(original_labels[i][:, 2]).long()
+                # if "train" not in mode:
+                target_full = get_instance_masks([torch.from_numpy(l) for l in original_labels],
+                                                    task=task,
+                                                    ignore_class_threshold=ignore_class_threshold,
+                                                    filter_out_classes=filter_out_classes,
+                                                    label_offset=label_offset)
+                for i in range(len(target_full)):
+                    target_full[i]["point2segment"] = torch.from_numpy(original_labels[i][:, 2]).long()
     else:
         target = []
         target_full = []
@@ -328,7 +328,7 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
         )
     else:
         return (
-            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords, original_coordinates=original_coordinates, original_features=original_features), target,
+            NoGpu(coordinates, features, original_labels, inverse_maps, full_res_coords, target_full = target_full, original_coordinates=original_coordinates, original_features=original_features), target,
             [sample[3] for sample in batch]
         )
 

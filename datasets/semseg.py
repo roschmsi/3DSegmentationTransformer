@@ -562,6 +562,9 @@ class SemanticSegmentationDataset(Dataset):
         if self.data[idx]['raw_filepath'].split("/")[-2] in ['scene0636_00', 'scene0154_00']:
             return self.__getitem__(0)
 
+        # torch.save(coordinates, f'coordinates_{self.mode}.pth')
+        # torch.save(features, f'features{self.mode}.pth')
+
         if self.dataset_name == "s3dis":
             return coordinates, features, labels, self.data[idx]['area'] + "_" + self.data[idx]['scene'],\
                    raw_color, raw_normals, raw_coordinates, idx

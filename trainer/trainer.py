@@ -745,8 +745,11 @@ class InstanceSegmentation(pl.LightningModule):
         root_path = f"eval_output"
         base_path = f"{root_path}/instance_evaluation_{self.config.general.experiment_name}_{self.current_epoch}"
 
+        file_mode = self.validation_dataset.mode
+        if self.debug:
+            file_mode = "train"
         if self.validation_dataset.dataset_name in ["scannet", "stpls3d", "scannet200"]:
-            gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/{self.validation_dataset.mode}"
+            gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/{file_mode}"
         else:
             gt_data_path = f"{self.validation_dataset.data_dir[0]}/instance_gt/Area_{self.config.general.area}"
 
@@ -989,9 +992,9 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         # self.device = torch.device('cuda:0') if config.general.gpus is not None else torch.device('cpu')
 
-    def forward(self, feat, coord, offset, batch, neighbor_idx, point2segment=None, raw_coordinates=None, is_eval=False):
+    def forward(self, feat, coord, offset, batch, neighbor_idx, masks, point2segment=None, raw_coordinates=None, is_eval=False):
         with self.optional_freeze():
-            x = self.model(feat, coord, offset, batch, neighbor_idx, point2segment, raw_coordinates=raw_coordinates,
+            x = self.model(feat, coord, offset, batch, neighbor_idx, masks, point2segment, raw_coordinates=raw_coordinates,
                            is_eval=is_eval)
         return x
 
@@ -1046,6 +1049,14 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             feat = torch.cat([feat, coord], 1)
 
         ####################################################################################################################
+        torch.save(coord, f'coord_trainstep.pth')
+        torch.save(feat, f'feat_trainstep.pth')
+        torch.save(batch, f'batch_trainstep.pth')
+        torch.save(offset, f'offset_trainstep.pth')
+        torch.save(neighbor_idx, f'neighboridx_trainstep.pth')
+
+        breakpoint()
+        auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
 
         try:
             output = self.forward(feat = feat,
@@ -1053,6 +1064,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                                   offset = offset,
                                   batch = batch,
                                   neighbor_idx = neighbor_idx,
+                                  masks =auxiliary_masks,
                                   point2segment=[target[i]['point2segment'] for i in range(len(target))],
                                   raw_coordinates=raw_coordinates)
         except RuntimeError as run_err:
@@ -1063,6 +1075,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 raise run_err
 
         try:
+            breakpoint()
             losses = self.criterion(output, target, mask_type=self.mask_type)
         except ValueError as val_err:
             print(f"ValueError: {val_err}")
@@ -1307,6 +1320,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         try:
             # TODO specify offset and batch correctly
+            torch.save(coord, f'coord_evalstep.pth')
+            torch.save(feat, f'feat_evalstep.pth')
+            torch.save(batch, f'batch_evalstep.pth')
+            torch.save(offset, f'offset_evalstep.pth')
+            torch.save(neighbor_idx, f'neighboridx_evalstep.pth')
             output = self.forward(feat = feat,
                                   coord = coord,
                                   offset = offset,
