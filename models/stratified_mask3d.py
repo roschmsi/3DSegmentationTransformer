@@ -1,8 +1,6 @@
 import torch
 import hydra
 import torch.nn as nn
-import MinkowskiEngine.MinkowskiOps as me
-from MinkowskiEngine.MinkowskiPooling import MinkowskiAvgPooling
 import numpy as np
 from torch.nn import functional as F
 from models.modules.common import conv

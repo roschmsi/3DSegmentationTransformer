@@ -7,8 +7,6 @@ from torch_points3d.core.common_modules import FastBatchNorm1d
 from torch_geometric.nn import voxel_grid
 from stratified_transformer.lib.pointops2.functions import pointops
 import numpy as np
-import MinkowskiEngine as ME
-from MinkowskiEngine import SparseTensorQuantizationMode
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
