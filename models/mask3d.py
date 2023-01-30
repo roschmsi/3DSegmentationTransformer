@@ -215,8 +215,6 @@ class Mask3D(nn.Module):
 
             coords.reverse()
 
-        # import pdb
-        # pdb.set_trace()
 
         pos_encodings_pcd = self.get_pos_encs(coords)
         mask_features = self.mask_features_head(pcd_features) # (num_voxels, D=128)
@@ -347,7 +345,7 @@ class Mask3D(nn.Module):
                 batched_attn = torch.stack([
                     decomposed_attn[k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])
-
+                # breakpoint()
                 batched_pos_enc = torch.stack([
                     pos_encodings_pcd[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])

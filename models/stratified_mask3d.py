@@ -196,7 +196,7 @@ class StratifiedMask3D(nn.Module):
 
         for i in range(len(coords)):
             pos_encodings_pcd.append([[]])
-            for coords_batch in coords[i].decomposed_features:
+            for coords_batch in coords[i]:
                 scene_min = coords_batch.min(dim=0)[0][None, ...]
                 scene_max = coords_batch.max(dim=0)[0][None, ...]
 
@@ -213,10 +213,10 @@ class StratifiedMask3D(nn.Module):
         # breakpoint()
 
         aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
-
+        aux_coords = [[a[1]] for a in aux[:-1]]
+        aux_pos_enc = self.get_pos_encs(aux_coords)
         pcd_features = aux[-1][0]
         batch_size = len(offset)
-
         # with torch.no_grad():
         #     coordinates = me.SparseTensor(features=pcd_features.coordinates[:, 1:] * self.voxel_size,
         #                                   coordinate_manager=aux[-1].coordinate_manager,
@@ -360,10 +360,10 @@ class StratifiedMask3D(nn.Module):
                 batched_attn = torch.stack([
                     decomposed_attn[k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])
-
-                # batched_pos_enc = torch.stack([
-                #     pos_encodings_pcd[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
-                # ])
+                
+                batched_pos_enc = torch.stack([
+                    aux_pos_enc[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
+                ])
 
                 batched_attn.permute((0, 2, 1))[batched_attn.sum(1) == rand_idx[0].shape[0]] = False
 
@@ -379,7 +379,7 @@ class StratifiedMask3D(nn.Module):
                     src_pcd,
                     memory_mask=batched_attn.repeat_interleave(self.num_heads, dim=0).permute((0, 2, 1)),
                     memory_key_padding_mask=None,  # here we do not apply masking on padded region
-                    pos=None, # batched_pos_enc.permute((1, 0, 2)),
+                    pos= batched_pos_enc.permute((1, 0, 2)),
                     query_pos=query_pos
                 )
 
@@ -423,14 +423,14 @@ class StratifiedMask3D(nn.Module):
         predictions_mask.append(outputs_mask)
 
         # print('stratified mask3d forward finished')
-        breakpoint()
-
+        aux_masks = [a[2] for a in aux[:-1]]
         return {
             'pred_logits': torch.stack(predictions_class[-1]),
             'pred_masks': torch.stack(predictions_mask[-1]),
             'aux_outputs': self._set_aux_loss(
                 predictions_class, predictions_mask
             ),
+            "aux_masks": aux_masks,
             'sampled_coords': sampled_coords.detach().cpu().numpy() if sampled_coords is not None else None,
             'backbone_features': pcd_features
         }

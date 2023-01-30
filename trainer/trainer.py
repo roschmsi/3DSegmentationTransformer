@@ -97,9 +97,6 @@ class InstanceSegmentation(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         data, target, file_names = batch
 
-        import pdb
-        pdb.set_trace()
-
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
             raise RuntimeError("BATCH TOO BIG")
@@ -1055,7 +1052,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         torch.save(offset, f'offset_trainstep.pth')
         torch.save(neighbor_idx, f'neighboridx_trainstep.pth')
 
-        breakpoint()
+        
         auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
 
         try:
@@ -1073,10 +1070,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 return None
             else:
                 raise run_err
-
         try:
-            breakpoint()
-            losses = self.criterion(output, target, mask_type=self.mask_type)
+            losses = self.criterion(output, data.target_full, mask_type=self.mask_type)
         except ValueError as val_err:
             print(f"ValueError: {val_err}")
             print(f"data shape: {data.shape}")
@@ -1294,7 +1289,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             return 0.
 
         # data = ME.SparseTensor(coordinates=data.coordinates, features=data.features, device=self.device)
-
+        auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
         offset = torch.IntTensor([len(data.original_coordinates[0])])
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
@@ -1332,6 +1327,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                                   neighbor_idx = neighbor_idx,
                                   point2segment=[target[i]['point2segment'] for i in range(len(target))],
                                   raw_coordinates=raw_coordinates,
+                                  masks=auxiliary_masks,
                                   is_eval=True)
         except RuntimeError as run_err:
             print(run_err)

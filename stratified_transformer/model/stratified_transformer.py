@@ -494,9 +494,7 @@ class Stratified(nn.Module):
 
         decoder_output = []
 
-        breakpoint()
-
-
+        
         decoder_output.append((feats.cuda(), xyz.cuda(), masks_stack.pop().cuda()))
 
         for i, upsample in enumerate(self.upsamples):
