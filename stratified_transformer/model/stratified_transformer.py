@@ -495,11 +495,11 @@ class Stratified(nn.Module):
         decoder_output = []
 
         
-        decoder_output.append((feats.cuda(), xyz.cuda(), masks_stack.pop().cuda()))
+        decoder_output.append((feats, xyz, masks_stack.pop()))
 
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
-            decoder_output.append((feats.cuda(), xyz.cuda(), masks_stack.pop().cuda()))
+            decoder_output.append((feats, xyz, masks_stack.pop()))
 
         return decoder_output
 

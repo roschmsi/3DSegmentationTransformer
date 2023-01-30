@@ -139,13 +139,13 @@ class StratifiedMask3D(nn.Module):
         self.ffn_attention = nn.ModuleList()
         self.lin_squeeze = nn.ModuleList()
 
-        self.projection_layers = [
-            nn.Linear(384, 128).cuda(),
-            nn.Linear(384, 128).cuda(),
-            nn.Linear(192, 128).cuda(),
-            nn.Linear(96, 128).cuda(),
-            nn.Linear(48, 128).cuda(),
-        ]
+        self.projection_layers = nn.ModuleList([
+            nn.Linear(384, 128),
+            nn.Linear(384, 128),
+            nn.Linear(192, 128),
+            nn.Linear(96, 128),
+            nn.Linear(48, 128),
+        ])
 
         num_shared = self.num_decoders if not self.shared_decoder else 1
 
@@ -213,9 +213,11 @@ class StratifiedMask3D(nn.Module):
         # breakpoint()
 
         aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
-        aux_coords = [[a[1]] for a in aux[:-1]]
-        aux_pos_enc = self.get_pos_encs(aux_coords)
-        pcd_features = aux[-1][0]
+        
+        with torch.no_grad():
+            aux_coords = [[a[1]] for a in aux[:-1]]
+            aux_pos_enc = self.get_pos_encs(aux_coords)
+            pcd_features = aux[-1][0]
         batch_size = len(offset)
         # with torch.no_grad():
         #     coordinates = me.SparseTensor(features=pcd_features.coordinates[:, 1:] * self.voxel_size,
@@ -342,6 +344,7 @@ class StratifiedMask3D(nn.Module):
 
                         midx[:pcd_size] = False  # attend to first points
                     else:
+                        # breakpoint()
                         # we have more points in pcd as we like to sample
                         # take a subset (no padding or masking needed)
                         idx = torch.randperm(decomposed_aux[k].shape[0],

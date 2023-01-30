@@ -997,8 +997,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         
+        torch.cuda.empty_cache()
         data, target, file_names = batch
-        # breakpoint()
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -1021,21 +1021,21 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         # import pdb
         # pdb.set_trace()
+        with torch.no_grad():
+            offset = torch.IntTensor([len(data.original_coordinates[0])])
+            offset_ = offset.clone()
+            offset_[1:] = offset_[1:] - offset_[:-1]
+            batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
 
-        offset = torch.IntTensor([len(data.original_coordinates[0])])
-        offset_ = offset.clone()
-        offset_[1:] = offset_[1:] - offset_[:-1]
-        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
+            sigma = 1.0
+            grid_size = 0.02
+            max_num_neighbors = 34
+            concat_xyz = True
+            radius = 2.5 * grid_size * sigma
+            coord = torch.from_numpy(data.original_coordinates[0])
+            feat = torch.from_numpy(data.original_features[0][:, :3])
 
-        sigma = 1.0
-        grid_size = 0.02
-        max_num_neighbors = 34
-        concat_xyz = True
-        radius = 2.5 * grid_size * sigma
-        coord = torch.from_numpy(data.original_coordinates[0])
-        feat = torch.from_numpy(data.original_features[0][:, :3])
-
-        neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+            neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
     
         coord, feat, offset = coord.cuda(non_blocking=True), feat.cuda(non_blocking=True), offset.cuda(non_blocking=True)
         batch = batch.cuda(non_blocking=True)
@@ -1046,11 +1046,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             feat = torch.cat([feat, coord], 1)
 
         ####################################################################################################################
-        torch.save(coord, f'coord_trainstep.pth')
-        torch.save(feat, f'feat_trainstep.pth')
-        torch.save(batch, f'batch_trainstep.pth')
-        torch.save(offset, f'offset_trainstep.pth')
-        torch.save(neighbor_idx, f'neighboridx_trainstep.pth')
+        # torch.save(coord, f'coord_trainstep.pth')
+        # torch.save(feat, f'feat_trainstep.pth')
+        # torch.save(batch, f'batch_trainstep.pth')
+        # torch.save(offset, f'offset_trainstep.pth')
+        # torch.save(neighbor_idx, f'neighboridx_trainstep.pth')
 
         
         auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
@@ -1264,7 +1264,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         v.save(f"{self.config['general']['save_dir']}/visualizations/{file_name}")
 
     def eval_step(self, batch, batch_idx):
-        # breakpoint()
+        torch.cuda.empty_cache()
         data, target, file_names = batch
         inverse_maps = data.inverse_maps
         target_full = data.target_full
@@ -1315,11 +1315,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         try:
             # TODO specify offset and batch correctly
-            torch.save(coord, f'coord_evalstep.pth')
-            torch.save(feat, f'feat_evalstep.pth')
-            torch.save(batch, f'batch_evalstep.pth')
-            torch.save(offset, f'offset_evalstep.pth')
-            torch.save(neighbor_idx, f'neighboridx_evalstep.pth')
+            # torch.save(coord, f'coord_evalstep.pth')
+            # torch.save(feat, f'feat_evalstep.pth')
+            # torch.save(batch, f'batch_evalstep.pth')
+            # torch.save(offset, f'offset_evalstep.pth')
+            # torch.save(neighbor_idx, f'neighboridx_evalstep.pth')
             output = self.forward(feat = feat,
                                   coord = coord,
                                   offset = offset,
