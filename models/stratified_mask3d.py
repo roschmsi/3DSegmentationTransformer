@@ -213,13 +213,13 @@ class StratifiedMask3D(nn.Module):
 
     def forward(self, feat, coord, offset, batch, neighbor_idx, masks, point2segment=None, raw_coordinates=None, is_eval=False):
         # TODO pcd_features
-        # breakpoint()
+        
         if self.debug:
             with torch.no_grad():
                 aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
         else:
             aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)
-        
+        breakpoint()
         with torch.no_grad():
             aux_coords = [[a[1]] for a in aux[:-1]]
             aux_pos_enc = self.get_pos_encs(aux_coords)

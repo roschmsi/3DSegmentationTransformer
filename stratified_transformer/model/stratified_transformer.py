@@ -114,10 +114,14 @@ class TransitionDown(nn.Module):
             else:
                 torch.save(idx, tdown_idx_path)
         
+        # breakpoint()
         n_xyz = xyz[idx.long(), :]  # (m, 3)
-        for i,n in enumerate(n_offset):
-            masks[i] = masks[i][idx[:n].long(), :]
-        breakpoint()
+        n_masks = []
+        for i in range(len(n_offset)):
+            start = 0 if i==0 else n_offset[i-1].item()
+            end = n_offset[i].item()
+            n_masks.append(masks[i][idx[start:end].long() - masks[i-1].shape[0], :])
+        
         feats = pointops.queryandgroup(self.k, xyz, n_xyz, feats, None, offset, n_offset, use_xyz=False)  # (m, nsample, 3+c)
         m, k, c = feats.shape
         feats = self.linear(self.norm(feats.view(m*k, c)).view(m, k, c)).transpose(1, 2).contiguous()
@@ -506,12 +510,12 @@ class Stratified(nn.Module):
         decoder_output = []
 
         
-        decoder_output.append((feats, xyz, masks_stack.pop()))
+        decoder_output.append((feats, xyz, masks_stack.pop(),offset))
 
         for i, upsample in enumerate(self.upsamples):
             feats, xyz, offset = upsample(feats, xyz, xyz_stack.pop(), offset, offset_stack.pop(), support_feats=feats_stack.pop())
-            decoder_output.append((feats, xyz, masks_stack.pop()))
-
+            decoder_output.append((feats, xyz, masks_stack.pop(),offset))
+        # breakpoint()
         return decoder_output
 
     def init_weights(self):
