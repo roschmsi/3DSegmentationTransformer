@@ -58,7 +58,7 @@ defaults:
   - data: indoor
   - data/data_loaders: simple_loader
   - data/datasets: scannet
-  - data/collation_functions: voxelize_collate
+  - data/collation_functions: stratified_voxelize_collate
   - logging: offline
   - model: stratified_mask3d
   - metrics: miou

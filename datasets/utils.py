@@ -46,6 +46,48 @@ class VoxelizeCollate:
                         num_queries=self.num_queries)
 
 
+class StratifiedVoxelizeCollate:
+    def __init__(
+            self,
+            ignore_label=255,
+            voxel_size=1,
+            mode="test",
+            small_crops=False,
+            very_small_crops=False,
+            batch_instance=False,
+            probing=False,
+            task="instance_segmentation",
+            ignore_class_threshold=100,
+            filter_out_classes=[],
+            label_offset=0,
+            num_queries=None
+    ):
+        assert task in ["instance_segmentation", "semantic_segmentation"], "task not known"
+        self.task = task
+        self.filter_out_classes = filter_out_classes
+        self.label_offset = label_offset
+        self.voxel_size = voxel_size
+        self.ignore_label = ignore_label
+        self.mode = mode
+        self.batch_instance = batch_instance
+        self.small_crops = small_crops
+        self.very_small_crops = very_small_crops
+        self.probing = probing
+        self.ignore_class_threshold = ignore_class_threshold
+
+        self.num_queries = num_queries
+
+    def __call__(self, batch):
+        if ("train" in self.mode) and (self.small_crops or self.very_small_crops):
+            batch = make_crops(batch)
+        if ("train" in self.mode) and self.very_small_crops:
+            batch = make_crops(batch)
+        return stratified_voxelize(batch, self.ignore_label, self.voxel_size, self.probing, self.mode,
+                        task=self.task, ignore_class_threshold=self.ignore_class_threshold,
+                        filter_out_classes=self.filter_out_classes, label_offset=self.label_offset,
+                        num_queries=self.num_queries)
+
+
 class VoxelizeCollateMerge:
     def __init__(
             self,
@@ -333,6 +375,40 @@ def voxelize(batch, ignore_label, voxel_size, probing, mode, task,
         )
 
 
+def stratified_voxelize(batch, ignore_label, voxel_size, probing, mode, task,
+             ignore_class_threshold, filter_out_classes, label_offset, num_queries):
+    (coordinates, features, labels, colors, normals, idx) = (
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
+
+    for sample in batch:
+        idx.append(sample[7])
+        coordinates.append(torch.from_numpy(sample[6]))
+        features.append(torch.from_numpy(sample[1]))
+        labels.append(torch.from_numpy(sample[2]))
+        colors.append(torch.from_numpy(sample[4]))
+        normals.append(torch.from_numpy(sample[5]))
+
+    targets = []
+
+    features = torch.stack(features)
+
+    # if len(labels[0].shape) == 1:
+    targets = get_instance_masks(labels, 
+        task, list_segments=None, ignore_class_threshold=ignore_class_threshold,
+        filter_out_classes=filter_out_classes, label_offset=label_offset)
+
+    return (
+        StratifiedNoGpu(coordinates, features, labels, colors, normals, idx), targets,
+        [sample[3] for sample in batch]
+    )
+
+
 def get_instance_masks(list_labels, task, list_segments=None, ignore_class_threshold=100,
                        filter_out_classes=[], label_offset=0):
     target = []
@@ -492,6 +568,19 @@ class NoGpu:
         self.original_coordinates = original_coordinates
         self.original_features = original_features
         self.idx = idx
+
+class StratifiedNoGpu:
+    def __init__(
+            self, coordinates, features, labels, colors, normals, idx
+    ):
+        """ helper class to prevent gpu loading on lightning """
+        self.coordinates = coordinates
+        self.features = features
+        self.labels = labels
+        self.colors = colors
+        self.normals = normals
+        self.idx = idx
+
 
 
 class NoGpuMask:

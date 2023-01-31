@@ -989,16 +989,17 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         # self.device = torch.device('cuda:0') if config.general.gpus is not None else torch.device('cpu')
 
-    def forward(self, feat, coord, offset, batch, neighbor_idx, masks, point2segment=None, raw_coordinates=None, is_eval=False):
+    def forward(self, feat, coord, offset, batch, neighbor_idx, masks, is_eval=False):
         with self.optional_freeze():
-            x = self.model(feat, coord, offset, batch, neighbor_idx, masks, point2segment, raw_coordinates=raw_coordinates,
-                           is_eval=is_eval)
+            x = self.model(feat, coord, offset, batch, neighbor_idx, masks, is_eval=is_eval)
         return x
 
     def training_step(self, batch, batch_idx):
         
         torch.cuda.empty_cache()
         data, target, file_names = batch
+
+        # breakpoint()
 
         if data.features.shape[0] > self.config.general.max_batch_size:
             print("data exceeds threshold")
@@ -1008,21 +1009,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             print("no targets")
             return None
 
-        raw_coordinates = None
-        if self.config.data.add_raw_coordinates:
-            raw_coordinates = data.features[:, -3:]
-            data.features = data.features[:, :-3]
-
-        # data = ME.SparseTensor(coordinates=data.coordinates,
-        #                       features=data.features,
-        #                       device=self.device)
-
-        # prepare mask3d data for stratified transformer ##############################################################
-
-        # import pdb
-        # pdb.set_trace()
         with torch.no_grad():
-            offset = torch.IntTensor([len(data.original_coordinates[0])])
+            offset = torch.IntTensor([len(data.coordinates[0])])
             offset_ = offset.clone()
             offset_[1:] = offset_[1:] - offset_[:-1]
             batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
@@ -1032,8 +1020,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             max_num_neighbors = 34
             concat_xyz = True
             radius = 2.5 * grid_size * sigma
-            coord = torch.from_numpy(data.original_coordinates[0])
-            feat = torch.from_numpy(data.original_features[0][:, :3])
+            coord = data.coordinates[0]
+            feat = data.features[0][:, :3]
 
             neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
 
@@ -1053,14 +1041,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             feat = torch.cat([feat, coord], 1)
 
         ####################################################################################################################
-        # torch.save(coord, f'coord_trainstep.pth')
-        # torch.save(feat, f'feat_trainstep.pth')
-        # torch.save(batch, f'batch_trainstep.pth')
-        # torch.save(offset, f'offset_trainstep.pth')
-        # torch.save(neighbor_idx, f'neighboridx_trainstep.pth')
-
-        
-        auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
+        auxiliary_masks = target[0]['masks'].transpose(0, 1).cuda()
 
         try:
             output = self.forward(feat = feat,
@@ -1068,9 +1049,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                                   offset = offset,
                                   batch = batch,
                                   neighbor_idx = neighbor_idx,
-                                  masks =auxiliary_masks,
-                                  point2segment=[target[i]['point2segment'] for i in range(len(target))],
-                                  raw_coordinates=raw_coordinates)
+                                  masks =auxiliary_masks)
         except RuntimeError as run_err:
             print(run_err)
             if 'only a single point gives nans in cross-attention' == run_err.args[0]:
@@ -1078,7 +1057,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             else:
                 raise run_err
         try:
-            losses = self.criterion(output, data.target_full, mask_type=self.mask_type)
+            losses = self.criterion(output, target, mask_type=self.mask_type)
         except ValueError as val_err:
             print(f"ValueError: {val_err}")
             print(f"data shape: {data.shape}")
@@ -1105,6 +1084,19 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         logs['train_mean_loss_dice'] = statistics.mean(
             [item for item in [v for k, v in logs.items() if "loss_dice" in k]])
+
+        if self.config.general.save_visualizations:
+            backbone_features = output['backbone_features'].F.detach().cpu().numpy()
+            from sklearn import decomposition
+            pca = decomposition.PCA(n_components=3)
+            pca.fit(backbone_features)
+            pca_features = pca.transform(backbone_features)
+            rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
+
+        self.eval_instance_step(output, target, file_names, data.coordinates, data.colors, data.normals, data.idx,
+                                backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
+        train_val_output = [{f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}]
+        self.test_epoch_end(train_val_output)
 
         self.log_dict(logs)
         return sum(losses.values())
@@ -1273,31 +1265,13 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
     def eval_step(self, batch, batch_idx):
         torch.cuda.empty_cache()
         data, target, file_names = batch
-        inverse_maps = data.inverse_maps
-        target_full = data.target_full
-        original_colors = data.original_colors
-        data_idx = data.idx
-        original_normals = data.original_normals
-        original_coordinates = data.original_coordinates
-
-        #if len(target) == 0 or len(target_full) == 0:
-        #    print("no targets")
-        #    return None
 
         if len(data.coordinates) == 0:
             return 0.
 
-        raw_coordinates = None
-        if self.config.data.add_raw_coordinates:
-            raw_coordinates = data.features[:, -3:]
-            data.features = data.features[:, :-3]
+        auxiliary_masks = target[0]['masks'].transpose(0, 1).cuda()
 
-        if raw_coordinates.shape[0] == 0:
-            return 0.
-
-        # data = ME.SparseTensor(coordinates=data.coordinates, features=data.features, device=self.device)
-        auxiliary_masks = data.target_full[0]['masks'].transpose(0, 1).cuda()
-        offset = torch.IntTensor([len(data.original_coordinates[0])])
+        offset = torch.IntTensor([len(data.coordinates[0])])
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
         batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
@@ -1307,8 +1281,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         max_num_neighbors = 34
         concat_xyz = True
         radius = 2.5 * grid_size * sigma
-        coord = torch.from_numpy(data.original_coordinates[0])
-        feat = torch.from_numpy(data.original_features[0][:, :3])
+        coord = data.coordinates[0]
+        feat = data.features[0][:, :3]
 
         neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
     
@@ -1328,19 +1302,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             feat = torch.cat([feat, coord], 1)
 
         try:
-            # TODO specify offset and batch correctly
-            # torch.save(coord, f'coord_evalstep.pth')
-            # torch.save(feat, f'feat_evalstep.pth')
-            # torch.save(batch, f'batch_evalstep.pth')
-            # torch.save(offset, f'offset_evalstep.pth')
-            # torch.save(neighbor_idx, f'neighboridx_evalstep.pth')
             output = self.forward(feat = feat,
                                   coord = coord,
                                   offset = offset,
                                   batch = batch,
                                   neighbor_idx = neighbor_idx,
-                                  point2segment=[target[i]['point2segment'] for i in range(len(target))],
-                                  raw_coordinates=raw_coordinates,
                                   masks=auxiliary_masks,
                                   is_eval=True)
         except RuntimeError as run_err:
@@ -1355,8 +1321,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 torch.use_deterministic_algorithms(False)
 
             try:
-                losses = self.criterion(output, target_full, #target
-                                        mask_type=self.mask_type)
+                losses = self.criterion(output, target, mask_type=self.mask_type)
             except ValueError as val_err:
                 print(f"ValueError: {val_err}")
                 print(f"data shape: {data.shape}")
@@ -1384,8 +1349,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             pca_features = pca.transform(backbone_features)
             rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
 
-        self.eval_instance_step(output, target, target_full, inverse_maps, file_names, original_coordinates,
-                                original_colors, original_normals, raw_coordinates, data_idx,
+        self.eval_instance_step(output, target, file_names, data.coordinates, data.colors, data.normals, data.idx,
                                 backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
 
         if self.config.data.test_mode != "test":
@@ -1430,9 +1394,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         return score, result_pred_mask, classes, heatmap
 
-    def eval_instance_step(self, output, target_low_res, target_full_res, inverse_maps, file_names,
-                           full_res_coords, original_colors, original_normals, raw_coords, idx, first_full_res=False,
-                           backbone_features=None,):
+    def eval_instance_step(self, output, target, file_names, coordinates, colors, normals, idx, backbone_features=None,):
         label_offset = self.validation_dataset.label_offset
         prediction = output['aux_outputs']
         prediction.append({
@@ -1452,79 +1414,48 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
         offset_coords_idx = 0
         for bid in range(len(prediction[self.decoder_id]['pred_masks'])):
-            if not first_full_res:
-                if self.model.train_on_segments:
-                    masks = prediction[self.decoder_id]['pred_masks'][bid].detach().cpu()[target_low_res[bid]['point2segment'].cpu()]
-                else:
-                    masks = prediction[self.decoder_id]['pred_masks'][bid].detach().cpu()
+            
+            masks = prediction[self.decoder_id]['pred_masks'][bid].detach().cpu()
 
-                if self.config.general.use_dbscan:
-                    new_preds = {
-                        'pred_masks': list(),
-                        'pred_logits': list(),
-                    }
+            if self.config.general.use_dbscan:
+                new_preds = {
+                    'pred_masks': list(),
+                    'pred_logits': list(),
+                }
 
-                    curr_coords_idx = masks.shape[0]
-                    curr_coords = raw_coords[offset_coords_idx:curr_coords_idx + offset_coords_idx]
-                    offset_coords_idx += curr_coords_idx
+                curr_coords_idx = masks.shape[0]
+                curr_coords = coordinates[offset_coords_idx:curr_coords_idx + offset_coords_idx]
+                offset_coords_idx += curr_coords_idx
 
-                    for curr_query in range(masks.shape[1]):
-                        curr_masks = masks[:, curr_query] > 0
+                for curr_query in range(masks.shape[1]):
+                    curr_masks = masks[:, curr_query] > 0
 
-                        if curr_coords[curr_masks].shape[0] > 0:
-                            clusters = DBSCAN(eps=self.config.general.dbscan_eps,
-                                              min_samples=self.config.general.dbscan_min_points,
-                                              n_jobs=-1).fit(curr_coords[curr_masks]).labels_
+                    if curr_coords[curr_masks].shape[0] > 0:
+                        clusters = DBSCAN(eps=self.config.general.dbscan_eps,
+                                            min_samples=self.config.general.dbscan_min_points,
+                                            n_jobs=-1).fit(curr_coords[curr_masks]).labels_
 
-                            new_mask = torch.zeros(curr_masks.shape, dtype=int)
-                            new_mask[curr_masks] = torch.from_numpy(clusters) + 1
+                        new_mask = torch.zeros(curr_masks.shape, dtype=int)
+                        new_mask[curr_masks] = torch.from_numpy(clusters) + 1
 
-                            for cluster_id in np.unique(clusters):
-                                original_pred_masks = masks[:, curr_query]
-                                if cluster_id != -1:
-                                    new_preds['pred_masks'].append(original_pred_masks * (new_mask == cluster_id + 1))
-                                    new_preds['pred_logits'].append(
-                                        prediction[self.decoder_id]['pred_logits'][bid, curr_query])
-
-                    scores, masks, classes, heatmap = self.get_mask_and_scores(
-                        torch.stack(new_preds['pred_logits']).cpu(),
-                        torch.stack(new_preds['pred_masks']).T,
-                        len(new_preds['pred_logits']),
-                        self.model.num_classes - 1)
-                else:
-                    scores, masks, classes, heatmap = self.get_mask_and_scores(
-                    prediction[self.decoder_id]['pred_logits'][bid].detach().cpu(),
-                    masks,
-                    prediction[self.decoder_id]['pred_logits'][bid].shape[0],
-                    self.model.num_classes - 1)
-
-                masks = self.get_full_res_mask(masks,
-                                               inverse_maps[bid],
-                                               target_full_res[bid]['point2segment'])
-
-                heatmap = self.get_full_res_mask(heatmap,
-                                                 inverse_maps[bid],
-                                                 target_full_res[bid]['point2segment'],
-                                                 is_heatmap=True)
-
-                if backbone_features is not None:
-                    backbone_features = self.get_full_res_mask(torch.from_numpy(backbone_features),
-                                                               inverse_maps[bid],
-                                                               target_full_res[bid]['point2segment'],
-                                                               is_heatmap=True)
-                    backbone_features = backbone_features.numpy()
-            else:
-                assert False,  "not tested"
-                masks = self.get_full_res_mask(prediction[self.decoder_id]['pred_masks'][bid].cpu(),
-                                               inverse_maps[bid],
-                                               target_full_res[bid]['point2segment'])
+                        for cluster_id in np.unique(clusters):
+                            original_pred_masks = masks[:, curr_query]
+                            if cluster_id != -1:
+                                new_preds['pred_masks'].append(original_pred_masks * (new_mask == cluster_id + 1))
+                                new_preds['pred_logits'].append(
+                                    prediction[self.decoder_id]['pred_logits'][bid, curr_query])
 
                 scores, masks, classes, heatmap = self.get_mask_and_scores(
-                    prediction[self.decoder_id]['pred_logits'][bid].cpu(),
-                    masks,
-                    prediction[self.decoder_id]['pred_logits'][bid].shape[0],
-                    self.model.num_classes - 1,
-                    device="cpu")
+                    torch.stack(new_preds['pred_logits']).cpu(),
+                    torch.stack(new_preds['pred_masks']).T,
+                    len(new_preds['pred_logits']),
+                    self.model.num_classes - 1)
+            else:
+                scores, masks, classes, heatmap = self.get_mask_and_scores(
+                prediction[self.decoder_id]['pred_logits'][bid].detach().cpu(),
+                masks,
+                prediction[self.decoder_id]['pred_logits'][bid].shape[0],
+                self.model.num_classes - 1)
 
             masks = masks.numpy()
             heatmap = heatmap.numpy()
@@ -1568,25 +1499,20 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 all_pred_scores.append(sort_scores_values)
                 all_heatmaps.append(sorted_heatmap)
 
-        if self.validation_dataset.dataset_name == "scannet200":
-            all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
-            if self.config.data.test_mode != "test":
-                target_full_res[bid]['labels'][target_full_res[bid]['labels'] == 0] = -1
-
         for bid in range(len(prediction[self.decoder_id]['pred_masks'])):
             all_pred_classes[bid] = self.validation_dataset._remap_model_output(all_pred_classes[bid].cpu() + label_offset)
 
-            if self.config.data.test_mode != "test" and len(target_full_res) != 0:
-                target_full_res[bid]['labels'] = self.validation_dataset._remap_model_output(
-                    target_full_res[bid]['labels'].cpu() + label_offset)
+            if self.config.data.test_mode != "test" and len(target) != 0:
+                target[bid]['labels'] = self.validation_dataset._remap_model_output(
+                    target[bid]['labels'].cpu() + label_offset)
 
                 # PREDICTION BOX
                 bbox_data = []
                 for query_id in range(all_pred_masks[bid].shape[1]):  # self.model.num_queries
-                    obj_coords = full_res_coords[bid][all_pred_masks[bid][:, query_id].astype(bool), :]
+                    obj_coords = coordinates[bid][all_pred_masks[bid][:, query_id].astype(bool), :]
                     if obj_coords.shape[0] > 0:
                         obj_center = obj_coords.mean(axis=0)
-                        obj_axis_length = obj_coords.max(axis=0) - obj_coords.min(axis=0)
+                        obj_axis_length = obj_coords.max(axis=0)[0] - obj_coords.min(axis=0)[0]
 
                         bbox = np.concatenate((obj_center, obj_axis_length))
 
@@ -1597,17 +1523,18 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
                 # GT BOX
                 bbox_data = []
-                for obj_id in range(target_full_res[bid]['masks'].shape[0]):
-                    if target_full_res[bid]['labels'][obj_id].item() == 255:
+                for obj_id in range(target[bid]['masks'].shape[0]):
+                    if target[bid]['labels'][obj_id].item() == 255:
                         continue
 
-                    obj_coords = full_res_coords[bid][target_full_res[bid]['masks'][obj_id, :].cpu().detach().numpy().astype(bool), :]
+                    obj_coords = coordinates[bid][target[bid]['masks'][obj_id, :].cpu().detach().numpy().astype(bool), :]
                     if obj_coords.shape[0] > 0:
                         obj_center = obj_coords.mean(axis=0)
-                        obj_axis_length = obj_coords.max(axis=0) - obj_coords.min(axis=0)
+                        # breakpoint()
+                        obj_axis_length = obj_coords.max(axis=0)[0] - obj_coords.min(axis=0)[0]
 
                         bbox = np.concatenate((obj_center, obj_axis_length))
-                        bbox_data.append((target_full_res[bid]['labels'][obj_id].item(), bbox))
+                        bbox_data.append((target[bid]['labels'][obj_id].item(), bbox))
 
                 self.bbox_gt[file_names[bid]] = bbox_data
 
@@ -1627,27 +1554,27 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
 
             if self.config.general.save_visualizations:
                 if 'cond_inner' in self.test_dataset.data[idx[bid]]:
-                    target_full_res[bid]['masks'] = target_full_res[bid]['masks'][:, self.test_dataset.data[idx[bid]]['cond_inner']]
-                    self.save_visualizations(target_full_res[bid],
-                                             full_res_coords[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
+                    target[bid]['masks'] = target[bid]['masks'][:, self.test_dataset.data[idx[bid]]['cond_inner']]
+                    self.save_visualizations(target[bid],
+                                             coordinates[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
                                              [self.preds[file_names[bid]]['pred_masks']],
                                              [self.preds[file_names[bid]]['pred_classes']],
                                              file_names[bid],
-                                             original_colors[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
-                                             original_normals[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
+                                             colors[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
+                                             normals[bid][self.test_dataset.data[idx[bid]]['cond_inner']],
                                              [self.preds[file_names[bid]]['pred_scores']],
                                              sorted_heatmaps=[all_heatmaps[bid][self.test_dataset.data[idx[bid]]['cond_inner']]],
                                              query_pos=all_query_pos[bid][self.test_dataset.data[idx[bid]]['cond_inner']] if len(all_query_pos) > 0 else None,
                                              backbone_features=backbone_features[self.test_dataset.data[idx[bid]]['cond_inner']],
                                              point_size=self.config.general.visualization_point_size)
                 else:
-                    self.save_visualizations(target_full_res[bid],
-                                             full_res_coords[bid],
+                    self.save_visualizations(target[bid],
+                                             coordinates[bid],
                                              [self.preds[file_names[bid]]['pred_masks']],
                                              [self.preds[file_names[bid]]['pred_classes']],
                                              file_names[bid],
-                                             original_colors[bid],
-                                             original_normals[bid],
+                                             colors[bid],
+                                             normals[bid],
                                              [self.preds[file_names[bid]]['pred_scores']],
                                              sorted_heatmaps=[all_heatmaps[bid]],
                                              query_pos=all_query_pos[bid] if len(all_query_pos) > 0 else None,
@@ -1831,6 +1758,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         self.bbox_gt = dict()
 
     def test_epoch_end(self, outputs):
+        # breakpoint()
         if self.config.general.export:
             return
 
