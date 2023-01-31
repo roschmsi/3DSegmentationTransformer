@@ -1093,10 +1093,11 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             pca_features = pca.transform(backbone_features)
             rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
 
-        self.eval_instance_step(output, target, file_names, data.coordinates, data.colors, data.normals, data.idx,
-                                backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
-        train_val_output = [{f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}]
-        self.test_epoch_end(train_val_output)
+        if self.debug:        
+            self.eval_instance_step(output, target, file_names, data.coordinates, data.colors, data.normals, data.idx,
+                                    backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
+            train_val_output = [{f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}]
+            self.test_epoch_end(train_val_output)
 
         self.log_dict(logs)
         return sum(losses.values())
