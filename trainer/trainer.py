@@ -998,18 +998,20 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         max_num_neighbors = 34
         concat_xyz = True
         radius = 2.5 * grid_size * sigma
-
-        offset = torch.IntTensor([len(data.coordinates[0])])
+        
+        batch_points_count = [len(x) for x in data.coordinates]
+        offset = np.cumsum(batch_points_count)
+        offset = torch.IntTensor(offset)
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
         batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
-        coord = data.coordinates[0]
-        feat = data.features[0][:, :3]
-
+        coord = torch.cat(data.coordinates)
+        feat = torch.cat(data.features)[:, :3]
+        
         neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
 
-        neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
         if self.debug:
+            neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
             if os.path.exists(neighbor_idx_path):
                 neighbor_idx = torch.load(neighbor_idx_path)
             else:
@@ -1023,7 +1025,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         if concat_xyz:
             feat = torch.cat([feat, coord], 1)
 
-        auxiliary_masks = target[0]['masks'].transpose(0, 1).cuda()
+        auxiliary_masks = [t['masks'].transpose(0, 1).cuda() for t in target]
 
         return feat, coord, offset, batch, neighbor_idx, auxiliary_masks
 

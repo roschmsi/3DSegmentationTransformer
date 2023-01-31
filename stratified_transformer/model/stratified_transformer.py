@@ -103,19 +103,21 @@ class TransitionDown(nn.Module):
             count += ((offset[i].item() - offset[i-1].item())*self.ratio) + 1
             n_offset.append(count)
         n_offset = torch.cuda.IntTensor(n_offset)
-
+        
         idx = pointops.furthestsampling(xyz, offset, n_offset)  # (m)
-
-        tdown_idx_path = f'debugging/tdown_idx_{feats.shape[0]}.pth'
+        
+        
         if self.debug:
+            tdown_idx_path = f'debugging/tdown_idx_{feats.shape[0]}.pth'
             if os.path.exists(tdown_idx_path):
                 idx = torch.load(tdown_idx_path)
             else:
                 torch.save(idx, tdown_idx_path)
         
         n_xyz = xyz[idx.long(), :]  # (m, 3)
-        masks = masks[idx.long(), :]
-
+        for i,n in enumerate(n_offset):
+            masks[i] = masks[i][idx[:n].long(), :]
+        breakpoint()
         feats = pointops.queryandgroup(self.k, xyz, n_xyz, feats, None, offset, n_offset, use_xyz=False)  # (m, nsample, 3+c)
         m, k, c = feats.shape
         feats = self.linear(self.norm(feats.view(m*k, c)).view(m, k, c)).transpose(1, 2).contiguous()
