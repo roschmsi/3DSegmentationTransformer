@@ -137,8 +137,6 @@ class InstanceSegmentation(pl.LightningModule):
             print(f"filenames: {file_names}")
             raise val_err
 
-        print('passed self criterion in training step')
-
         for k in list(losses.keys()):
             if k in self.criterion.weight_dict:
                 losses[k] *= self.criterion.weight_dict[k]
@@ -994,36 +992,21 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             x = self.model(feat, coord, offset, batch, neighbor_idx, masks, is_eval=is_eval)
         return x
 
-    def training_step(self, batch, batch_idx):
-        
-        torch.cuda.empty_cache()
-        data, target, file_names = batch
+    def preprocess_input(self, data, target,  ):
+        sigma = 1.0
+        grid_size = 0.02
+        max_num_neighbors = 34
+        concat_xyz = True
+        radius = 2.5 * grid_size * sigma
 
-        # breakpoint()
+        offset = torch.IntTensor([len(data.coordinates[0])])
+        offset_ = offset.clone()
+        offset_[1:] = offset_[1:] - offset_[:-1]
+        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
+        coord = data.coordinates[0]
+        feat = data.features[0][:, :3]
 
-        if data.features.shape[0] > self.config.general.max_batch_size:
-            print("data exceeds threshold")
-            raise RuntimeError("BATCH TOO BIG")
-
-        if len(target) == 0:
-            print("no targets")
-            return None
-
-        with torch.no_grad():
-            offset = torch.IntTensor([len(data.coordinates[0])])
-            offset_ = offset.clone()
-            offset_[1:] = offset_[1:] - offset_[:-1]
-            batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
-
-            sigma = 1.0
-            grid_size = 0.02
-            max_num_neighbors = 34
-            concat_xyz = True
-            radius = 2.5 * grid_size * sigma
-            coord = data.coordinates[0]
-            feat = data.features[0][:, :3]
-
-            neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+        neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
 
         neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
         if self.debug:
@@ -1040,8 +1023,25 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         if concat_xyz:
             feat = torch.cat([feat, coord], 1)
 
-        ####################################################################################################################
         auxiliary_masks = target[0]['masks'].transpose(0, 1).cuda()
+
+        return feat, coord, offset, batch, neighbor_idx, auxiliary_masks
+
+
+    def training_step(self, batch, batch_idx):
+        
+        torch.cuda.empty_cache()
+        data, target, file_names = batch
+
+        if len(data.features) > self.config.general.max_batch_size:
+            print("data exceeds threshold")
+            raise RuntimeError("BATCH TOO BIG")
+
+        if len(target) == 0:
+            print("no targets")
+            return None
+
+        feat, coord, offset, batch, neighbor_idx, auxiliary_masks = self.preprocess_input(data, target)
 
         try:
             output = self.forward(feat = feat,
@@ -1269,38 +1269,8 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         if len(data.coordinates) == 0:
             return 0.
 
-        auxiliary_masks = target[0]['masks'].transpose(0, 1).cuda()
-
-        offset = torch.IntTensor([len(data.coordinates[0])])
-        offset_ = offset.clone()
-        offset_[1:] = offset_[1:] - offset_[:-1]
-        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
-
-        sigma = 1.0
-        grid_size = 0.02
-        max_num_neighbors = 34
-        concat_xyz = True
-        radius = 2.5 * grid_size * sigma
-        coord = data.coordinates[0]
-        feat = data.features[0][:, :3]
-
-        neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+        feat, coord, offset, batch, neighbor_idx, auxiliary_masks = self.preprocess_input(data, target)
     
-        neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
-        if self.debug:
-            if os.path.exists(neighbor_idx_path):
-                neighbor_idx = torch.load(neighbor_idx_path)
-            else:
-                torch.save(neighbor_idx, neighbor_idx_path)
-    
-        coord, feat, offset = coord.cuda(non_blocking=True), feat.cuda(non_blocking=True), offset.cuda(non_blocking=True)
-        batch = batch.cuda(non_blocking=True)
-        neighbor_idx = neighbor_idx.cuda(non_blocking=True)
-        assert batch.shape[0] == feat.shape[0]
-        
-        if concat_xyz:
-            feat = torch.cat([feat, coord], 1)
-
         try:
             output = self.forward(feat = feat,
                                   coord = coord,

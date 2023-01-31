@@ -396,7 +396,7 @@ def stratified_voxelize(batch, ignore_label, voxel_size, probing, mode, task,
 
     targets = []
 
-    features = torch.stack(features)
+    # features = torch.stack(features)
 
     # if len(labels[0].shape) == 1:
     targets = get_instance_masks(labels, 

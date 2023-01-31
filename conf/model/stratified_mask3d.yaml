@@ -20,7 +20,7 @@ hlevels: [0,1,2,3]
 non_parametric_queries: false
 random_query_both: false
 random_normal: false
-random_queries: true
+random_queries: false
 use_np_features: false
 
 # sampling
