@@ -142,11 +142,11 @@ class StratifiedMask3D(nn.Module):
         self.lin_squeeze = nn.ModuleList()
 
         self.projection_layers = nn.ModuleList([
-            nn.Linear(384, 128),
-            nn.Linear(384, 128),
-            nn.Linear(192, 128),
-            nn.Linear(96, 128),
-            nn.Linear(48, 128),
+            nn.Linear(384, self.mask_dim),
+            nn.Linear(384, self.mask_dim),
+            nn.Linear(192, self.mask_dim),
+            nn.Linear(96, self.mask_dim),
+            nn.Linear(48, self.mask_dim),
         ])
 
         num_shared = self.num_decoders if not self.shared_decoder else 1
