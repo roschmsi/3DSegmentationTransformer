@@ -63,7 +63,7 @@ defaults:
   - model: stratified_mask3d
   - metrics: miou
   - optimizer: adamw
-  - scheduler: lambdalr # onecyclelr
+  - scheduler: onecyclelr
   - trainer: trainer600
   - callbacks: callbacks_instance_segmentation
   - matcher: hungarian_matcher

@@ -26,7 +26,7 @@ use_np_features: false
 # sampling
 # sample_sizes: [200, 800, 3200, 12800, 51200]
 sample_sizes: [391, 1563, 6251, 25001, 100000]
-max_sample_size: false # change false means sampling activated
+max_sample_size: true # change false means sampling activated
 
 shared_decoder: true
 num_classes: ${general.num_targets}
@@ -39,9 +39,9 @@ config:
   backbone:
     _target_: stratified_transformer.model.stratified_transformer.Stratified
     downsample_scale: 4
-    depths: [3, 3, 9, 3, 3] 
-    channels: [48, 96, 192, 384, 384] 
-    num_heads: [3, 6, 12, 24, 24] 
+    depths: [3, 3, 9, 3, 3]
+    channels: [48, 96, 192, 384, 384]
+    num_heads: [3, 6, 12, 24, 24]
     window_size: 5
     up_k: 3
     grid_size: 0.02

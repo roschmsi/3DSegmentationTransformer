@@ -360,13 +360,13 @@ class SemanticSegmentationDataset(Dataset):
 
         # random downsampling
         # TODO disable for overfit, enable for full training
-        # if len(coordinates) > 100000 and "train" in self.mode:
-        #     idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
-        #     coordinates = coordinates[idx_kept]
-        #     color = color[idx_kept]
-        #     normals = normals[idx_kept]
-        #     segments = segments[idx_kept]
-        #     labels = labels[idx_kept]
+        if len(coordinates) > 100000 and "train" in self.mode:
+            idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
+            coordinates = coordinates[idx_kept]
+            color = color[idx_kept]
+            normals = normals[idx_kept]
+            segments = segments[idx_kept]
+            labels = labels[idx_kept]
 
         raw_coordinates = coordinates.copy()
         raw_color = color

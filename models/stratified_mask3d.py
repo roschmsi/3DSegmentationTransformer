@@ -54,7 +54,8 @@ class StratifiedMask3D(nn.Module):
         self.debug = debug
 
         self.backbone = hydra.utils.instantiate(config.backbone)
-        self.backbone.requires_grad = False
+        if self.debug:
+            self.backbone.requires_grad = False
 
         self.num_levels = len(self.hlevels)
         
@@ -213,8 +214,11 @@ class StratifiedMask3D(nn.Module):
     def forward(self, feat, coord, offset, batch, neighbor_idx, masks, point2segment=None, raw_coordinates=None, is_eval=False):
         # TODO pcd_features
         # breakpoint()
-        with torch.no_grad():
-            aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
+        if self.debug:
+            with torch.no_grad():
+                aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
+        else:
+            aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)
         
         with torch.no_grad():
             aux_coords = [[a[1]] for a in aux[:-1]]
@@ -288,7 +292,6 @@ class StratifiedMask3D(nn.Module):
 
 
                 decomposed_aux = aux[hlevel][0].unsqueeze(0)
-
                 decomposed_attn = attn_mask.unsqueeze(0)
 
                 curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
