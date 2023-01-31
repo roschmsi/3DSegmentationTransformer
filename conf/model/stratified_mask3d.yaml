@@ -59,3 +59,4 @@ config:
     sigma: 1.0
     stem_transformer: False
     patch_size: 1
+    debug: ${data.debug}

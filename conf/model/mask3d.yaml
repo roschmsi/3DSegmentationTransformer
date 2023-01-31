@@ -33,6 +33,8 @@ scatter_type: "mean"
 
 voxel_size: ${data.voxel_size}
 
+debug: ${data.debug}
+
 config:
   backbone:
     _target_: models.Res16UNet34C

@@ -23,7 +23,8 @@ class StratifiedMask3D(nn.Module):
                  random_queries,
                  gauss_scale,
                  random_query_both,
-                 random_normal
+                 random_normal,
+                 debug=False
                  ):
         super().__init__()
 
@@ -50,6 +51,7 @@ class StratifiedMask3D(nn.Module):
         self.num_heads = num_heads
         self.num_queries = num_queries
         self.pos_enc_type = positional_encoding_type
+        self.debug = debug
 
         self.backbone = hydra.utils.instantiate(config.backbone)
         self.num_levels = len(self.hlevels)

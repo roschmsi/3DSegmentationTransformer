@@ -7,6 +7,7 @@ from torch_points3d.core.common_modules import FastBatchNorm1d
 from torch_geometric.nn import voxel_grid
 from stratified_transformer.lib.pointops2.functions import pointops
 import numpy as np
+import os
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
@@ -86,13 +87,14 @@ class Mlp(nn.Module):
         return x
 
 class TransitionDown(nn.Module):
-    def __init__(self, in_channels, out_channels, ratio, k, norm_layer=nn.LayerNorm):
+    def __init__(self, in_channels, out_channels, ratio, k, norm_layer=nn.LayerNorm, debug=False):
         super().__init__()
         self.ratio = ratio
         self.k = k
         self.norm = norm_layer(in_channels) if norm_layer else None
         self.linear = nn.Linear(in_channels, out_channels, bias=False)
         self.pool = nn.MaxPool1d(k)
+        self.debug = debug
 
     def forward(self, feats, xyz, offset, masks):
 
@@ -101,9 +103,17 @@ class TransitionDown(nn.Module):
             count += ((offset[i].item() - offset[i-1].item())*self.ratio) + 1
             n_offset.append(count)
         n_offset = torch.cuda.IntTensor(n_offset)
-        idx = pointops.furthestsampling(xyz, offset, n_offset)  # (m)
-        n_xyz = xyz[idx.long(), :]  # (m, 3)
 
+        idx = pointops.furthestsampling(xyz, offset, n_offset)  # (m)
+
+        tdown_idx_path = f'debugging/tdown_idx_{feats.shape[0]}.pth'
+        if self.debug:
+            if os.path.exists(tdown_idx_path):
+                idx = torch.load(tdown_idx_path)
+            else:
+                torch.save(idx, tdown_idx_path)
+        
+        n_xyz = xyz[idx.long(), :]  # (m, 3)
         masks = masks[idx.long(), :]
 
         feats = pointops.queryandgroup(self.k, xyz, n_xyz, feats, None, offset, n_offset, use_xyz=False)  # (m, nsample, 3+c)
@@ -259,7 +269,7 @@ class SwinTransformerBlock(nn.Module):
 class BasicLayer(nn.Module):
     def __init__(self, downsample_scale, depth, channel, num_heads, window_size, grid_size, quant_size, 
             rel_query=True, rel_key=False, rel_value=False, drop_path=0.0, mlp_ratio=4.0, qkv_bias=True, \
-            qk_scale=None, norm_layer=nn.LayerNorm, downsample=None, ratio=0.25, k=16, out_channels=None):
+            qk_scale=None, norm_layer=nn.LayerNorm, downsample=None, ratio=0.25, k=16, out_channels=None, debug=False):
         super().__init__()
         self.depth = depth
         self.grid_size = grid_size
@@ -271,7 +281,7 @@ class BasicLayer(nn.Module):
             rel_query=rel_query, rel_key=rel_key, rel_value=rel_value, drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,\
             mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale, norm_layer=norm_layer) for i in range(depth)])
 
-        self.downsample = downsample(channel, out_channels, ratio, k) if downsample else None
+        self.downsample = downsample(channel, out_channels, ratio, k, debug=debug) if downsample else None
 
     def forward(self, feats, xyz, offset, masks):
         # feats: N, C
@@ -403,7 +413,8 @@ class KPConvResBlock(nn.Module):
 class Stratified(nn.Module):
     def __init__(self, downsample_scale, depths, channels, num_heads, window_size, up_k, \
             grid_size, quant_size, rel_query=True, rel_key=False, rel_value=False, drop_path_rate=0.2, \
-            num_layers=4, concat_xyz=False, num_classes=13, ratio=0.25, k=16, prev_grid_size=0.04, sigma=1.0, stem_transformer=False, patch_size=1):
+            num_layers=4, concat_xyz=False, num_classes=13, ratio=0.25, k=16, prev_grid_size=0.04, sigma=1.0, \
+            stem_transformer=False, patch_size=1, debug=False):
         super().__init__()
 
         patch_size = grid_size * patch_size
@@ -424,13 +435,13 @@ class Stratified(nn.Module):
                 KPConvSimpleBlock(3 if not concat_xyz else 6, channels[0], prev_grid_size, sigma=sigma),
                 KPConvResBlock(channels[0], channels[0], prev_grid_size, sigma=sigma)
             ])
-            self.downsample = TransitionDown(channels[0], channels[1], ratio, k)
+            self.downsample = TransitionDown(channels[0], channels[1], ratio, k, debug=debug)
             self.layer_start = 1
 
         self.layers = nn.ModuleList([BasicLayer(downsample_scale, depths[i], channels[i], num_heads[i], window_size[i], grid_sizes[i], \
             quant_sizes[i], rel_query=rel_query, rel_key=rel_key, rel_value=rel_value, \
             drop_path=dpr[sum(depths[:i]):sum(depths[:i+1])], downsample=TransitionDown if i < num_layers-1 else None, \
-            ratio=ratio, k=k, out_channels=channels[i+1] if i < num_layers-1 else None) for i in range(self.layer_start, num_layers)])
+            ratio=ratio, k=k, out_channels=channels[i+1] if i < num_layers-1 else None, debug=debug) for i in range(self.layer_start, num_layers)])
 
         self.upsamples = nn.ModuleList([Upsample(up_k, channels[i], channels[i-1]) for i in range(num_layers-1, 0, -1)])
         

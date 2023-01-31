@@ -1036,6 +1036,13 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
             feat = torch.from_numpy(data.original_features[0][:, :3])
 
             neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+
+        neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
+        if self.debug:
+            if os.path.exists(neighbor_idx_path):
+                neighbor_idx = torch.load(neighbor_idx_path)
+            else:
+                torch.save(neighbor_idx, neighbor_idx_path)
     
         coord, feat, offset = coord.cuda(non_blocking=True), feat.cuda(non_blocking=True), offset.cuda(non_blocking=True)
         batch = batch.cuda(non_blocking=True)
@@ -1304,6 +1311,13 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
         feat = torch.from_numpy(data.original_features[0][:, :3])
 
         neighbor_idx = tp.ball_query(radius, max_num_neighbors, coord, coord, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
+    
+        neighbor_idx_path = f'debugging/neighbor_idx_{coord.shape[0]}.pth'
+        if self.debug:
+            if os.path.exists(neighbor_idx_path):
+                neighbor_idx = torch.load(neighbor_idx_path)
+            else:
+                torch.save(neighbor_idx, neighbor_idx_path)
     
         coord, feat, offset = coord.cuda(non_blocking=True), feat.cuda(non_blocking=True), offset.cuda(non_blocking=True)
         batch = batch.cuda(non_blocking=True)
