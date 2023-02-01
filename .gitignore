@@ -170,3 +170,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 scannet_val.ckpt
+mask3d_scannet_val.ckpt
+stratified_scannet_model_best.pth
+debugging/neighbor_idx_81369.pth
+debugging/tdown_idx_1272.pth
+debugging/tdown_idx_5086.pth
+debugging/tdown_idx_20343.pth
+debugging/tdown_idx_81369.pth
