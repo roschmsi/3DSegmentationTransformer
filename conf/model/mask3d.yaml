@@ -33,7 +33,7 @@ scatter_type: "mean"
 
 voxel_size: ${data.voxel_size}
 
-debug: ${data.debug}
+# debug: ${data.debug}
 
 config:
   backbone:

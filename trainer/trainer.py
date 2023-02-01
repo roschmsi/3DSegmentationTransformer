@@ -15,7 +15,7 @@ from utils.votenet_utils.eval_det import eval_det
 from datasets.scannet200.scannet200_splits import HEAD_CATS_SCANNET_200, TAIL_CATS_SCANNET_200, COMMON_CATS_SCANNET_200, VALID_CLASS_IDS_200_VALIDATION
 
 import hydra
-# import MinkowskiEngine as ME
+import MinkowskiEngine as ME
 import numpy as np
 import pytorch_lightning as pl
 import torch

@@ -124,9 +124,9 @@ class StratifiedMask3D(nn.Module):
             self.pos_enc = PositionalEncoding3D(channels=self.mask_dim)
         elif self.pos_enc_type == "fourier":
             self.pos_enc = PositionEmbeddingCoordsSine(pos_type="fourier",
-                                                       d_pos=self.mask_dim,
-                                                       gauss_scale=self.gauss_scale,
-                                                       normalize=self.normalize_pos_enc)
+                                                       d_pos=self.mask_dim, #128
+                                                       gauss_scale=self.gauss_scale, #1.0
+                                                       normalize=self.normalize_pos_enc) #True
         elif self.pos_enc_type == "sine":
             self.pos_enc = PositionEmbeddingCoordsSine(pos_type="sine",
                                                        d_pos=self.mask_dim,
@@ -219,13 +219,26 @@ class StratifiedMask3D(nn.Module):
                 aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)  # (num_voxels, 96)
         else:
             aux = self.backbone(feat, coord, offset, batch, neighbor_idx, masks)
-        breakpoint()
-        with torch.no_grad():
-            aux_coords = [[a[1]] for a in aux[:-1]]
-            aux_pos_enc = self.get_pos_encs(aux_coords)
-            pcd_features = aux[-1][0]
-        batch_size = len(offset)
+        aux_decomposed = []
+        for a in aux:
+            offsets = a[-1]
+            coords = a[1]
+            feats = a[0]
+            masks = a[2]
+            offset_indices = [0]+offsets.tolist()
+            coords_dec = [coords[offset_indices[i]:offset_indices[i+1]] for i in range(len(offsets))]
+            feats_dec = [feats[offset_indices[i]:offset_indices[i+1]] for i in range(len(offsets))]
+            aux_decomposed.append((feats_dec,coords_dec,masks))
         
+
+        pcd_features = []
+        for b in range(len(offset)):
+            with torch.no_grad():
+                pcd_features = aux_decomposed[-1][b][0]
+            
+        aux_coords = [[a[1][b] for b in range(len(offset))] for a in aux_decomposed[:-1]]
+        aux_pos_enc = self.get_pos_encs(aux_coords)
+        batch_size = len(offset)
         sampled_coords = None
 
         if self.non_parametric_queries:
@@ -280,8 +293,7 @@ class StratifiedMask3D(nn.Module):
                 decoder_counter = 0
             for i, hlevel in enumerate(self.hlevels):
                 
-                mask_features = self.projection_layers[hlevel](aux[hlevel][0])
-
+                mask_features = [self.projection_layers[hlevel](aux_decomposed[hlevel][0][i]) for i in range(batch_size)]
                 output_class, outputs_mask, attn_mask = self.mask_module(queries,
                                                         mask_features,
                                                         None,
@@ -290,13 +302,12 @@ class StratifiedMask3D(nn.Module):
                                                         point2segment=None,
                                                         coords=None)
 
+                # decomposed_aux = aux[hlevel][0].unsqueeze(0)
+                # decomposed_attn = attn_mask
 
-                decomposed_aux = aux[hlevel][0].unsqueeze(0)
-                decomposed_attn = attn_mask.unsqueeze(0)
+                curr_sample_size = max([pcd.shape[0] for pcd in aux_decomposed[hlevel][0]])
 
-                curr_sample_size = max([pcd.shape[0] for pcd in decomposed_aux])
-
-                if min([pcd.shape[0] for pcd in decomposed_aux]) == 1:
+                if min([pcd.shape[0] for pcd in aux_decomposed[hlevel][0]]) == 1:
                     raise RuntimeError("only a single point gives nans in cross-attention")
 
                 if not (self.max_sample_size or is_eval):
@@ -304,8 +315,8 @@ class StratifiedMask3D(nn.Module):
 
                 rand_idx = []
                 mask_idx = []
-                for k in range(len(decomposed_aux)):
-                    pcd_size = decomposed_aux[k].shape[0]
+                for k in range(len(aux_decomposed[hlevel][0])):
+                    pcd_size = aux_decomposed[hlevel][0][k].shape[0]
                     if pcd_size <= curr_sample_size:
                         # we do not need to sample
                         # take all points and pad the rest with zeroes and mask it
@@ -325,7 +336,7 @@ class StratifiedMask3D(nn.Module):
                         # breakpoint()
                         # we have more points in pcd as we like to sample
                         # take a subset (no padding or masking needed)
-                        idx = torch.randperm(decomposed_aux[k].shape[0],
+                        idx = torch.randperm(aux_decomposed[hlevel][0][k].shape[0],
                                              device=queries.device)[:curr_sample_size]
                         midx = torch.zeros(curr_sample_size,
                                            dtype=torch.bool,
@@ -335,11 +346,11 @@ class StratifiedMask3D(nn.Module):
                     mask_idx.append(midx)
 
                 batched_aux = torch.stack([
-                    decomposed_aux[k][rand_idx[k], :] for k in range(len(rand_idx))
+                    aux_decomposed[hlevel][0][k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])
 
                 batched_attn = torch.stack([
-                    decomposed_attn[k][rand_idx[k], :] for k in range(len(rand_idx))
+                    attn_mask[k][rand_idx[k], :] for k in range(len(rand_idx))
                 ])
                 
                 batched_pos_enc = torch.stack([
@@ -381,7 +392,8 @@ class StratifiedMask3D(nn.Module):
             # import pdb
             # pdb.set_trace()
 
-        mask_features = self.projection_layers[-1](aux[-1][0])
+        mask_features = [self.projection_layers[-1](aux_decomposed[-1][0][i]) for i in range(batch_size)]
+        
         output_class, outputs_mask = self.mask_module(queries,
                                                         mask_features,
                                                         None,
@@ -393,10 +405,11 @@ class StratifiedMask3D(nn.Module):
         predictions_mask.append(outputs_mask)
 
         # print('stratified mask3d forward finished')
-        aux_masks = [a[2] for a in aux[:-1]]
+        aux_masks = [a[2] for a in aux_decomposed[:-1]]
+        
         return {
-            'pred_logits': torch.stack(predictions_class[-1]),
-            'pred_masks': torch.stack(predictions_mask[-1]),
+            'pred_logits': predictions_class[-1],
+            'pred_masks': predictions_mask[-1],
             'aux_outputs': self._set_aux_loss(
                 predictions_class, predictions_mask
             ),
@@ -414,23 +427,18 @@ class StratifiedMask3D(nn.Module):
         output_masks = []
 
         # dot product of masked module to prefilter features
+        for i in range(len(mask_features)):
+            output_masks.append(mask_features[i] @ mask_embed[i].T)
 
-        output_masks.append(mask_features @ mask_embed.squeeze().T)
-
-        output_masks = torch.cat(output_masks)
+        output_masks = output_masks
 
         if ret_attn_mask:
-            attn_mask = output_masks
-            # for _ in range(num_pooling_steps):
-            #     attn_mask = self.pooling(attn_mask.float().T).T
-
-            attn_mask = attn_mask.detach().sigmoid() < 0.5
-
+            attn_mask = [om.detach().sigmoid() < 0.5 for om in output_masks]
             
-            return [outputs_class.squeeze()], [output_masks], attn_mask
+            return outputs_class, output_masks, attn_mask
 
         
-        return [outputs_class.squeeze()], [output_masks]
+        return outputs_class, output_masks
 
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_seg_masks):

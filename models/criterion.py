@@ -525,15 +525,19 @@ class StratifiedSetCriterion(nn.Module):
         
         if "aux_outputs" in outputs:
             for i, aux_output in enumerate(outputs["aux_outputs"]):
-                aux_output = {k: torch.stack(v) for k, v in aux_output.items()}
-                aux_target = {}
-                # breakpoint()
-                aux_target["masks"] = outputs['aux_masks'][i%4].T
-                aux_target["labels"] = targets[0]['labels']
-                aux_target = [aux_target] #batch rep
-                indices = self.matcher(aux_output, aux_target, mask_type)
+                # aux_output = {k: torch.stack(v) for k, v in aux_output.items()}
+                
+                aux_targets = []
+                
+                for b in range(aux_output["pred_logits"].shape[0]):
+                    aux_target = {}
+                    aux_target["masks"] = outputs['aux_masks'][i%4][b].T
+                    aux_target["labels"] = targets[b]['labels']
+                    aux_targets.append(aux_target) 
+                
+                indices = self.matcher(aux_output, aux_targets, mask_type)
                 for loss in self.losses:
-                    l_dict = self.get_loss(loss, aux_output, aux_target, indices, num_masks, mask_type)
+                    l_dict = self.get_loss(loss, aux_output, aux_targets, indices, num_masks, mask_type)
                     l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
         # 1. create masks from downsampled labels

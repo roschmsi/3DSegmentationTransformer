@@ -292,7 +292,7 @@ class Mask3D(nn.Module):
                                                           ret_attn_mask=True,
                                                           point2segment=None,
                                                           coords=coords)
-
+                # breakpoint()
                 decomposed_aux = aux[hlevel].decomposed_features
                 decomposed_attn = attn_mask.decomposed_features
 
@@ -420,6 +420,7 @@ class Mask3D(nn.Module):
         outputs_class = self.class_embed_head(query_feat)
 
         output_masks = []
+        breakpoint()
 
         # dot product of masked module to prefilter features
 
