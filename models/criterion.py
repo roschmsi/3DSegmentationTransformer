@@ -157,6 +157,14 @@ class SetCriterion(nn.Module):
             map = outputs["pred_masks"][batch_id][:, map_id].T
             target_mask = targets[batch_id][mask_type][target_id]
 
+            #TODO: rem foll. hack
+            # print(f"loss_mask map:{map.shape}, target:{target_mask.shape}")
+            # mask_trim = map.shape[1]%5
+            # if mask_trim!=0:
+            #     map = map[:,:-mask_trim]
+            #     target_mask = target_mask[:,:map.shape[1]]
+            #     print(f"after trimming: loss_mask map:{map.shape}, target:{target_mask.shape}")
+
             if self.num_points != -1:
                 point_idx = torch.randperm(target_mask.shape[1],
                                            device=target_mask.device)[:int(self.num_points*target_mask.shape[1])]
@@ -278,7 +286,6 @@ class SetCriterion(nn.Module):
         losses = {}
         for loss in self.losses:
             losses.update(self.get_loss(loss, outputs, targets, indices, num_masks, mask_type))
-
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "aux_outputs" in outputs:
             for i, aux_outputs in enumerate(outputs["aux_outputs"]):

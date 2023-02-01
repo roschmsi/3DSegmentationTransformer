@@ -407,25 +407,22 @@ class StratifiedMask3D(nn.Module):
 
             # import pdb
             # pdb.set_trace()
-
-        # if self.train_on_segments:
-        #     output_class, outputs_mask = self.mask_module(queries,
-        #                                                   mask_features,
-        #                                                   mask_segments,
-        #                                                   0,
-        #                                                   ret_attn_mask=False,
-        #                                                   point2segment=point2segment,
-        #                                                   coords=coords)
-        # else:
-            # import pdb
-            # pdb.set_trace()
-        output_class, outputs_mask = self.mask_module(queries,
-                                                        mask_features,
-                                                        None,
-                                                        0,
-                                                        ret_attn_mask=False,
-                                                        point2segment=None,
-                                                        coords=None)
+        if self.train_on_segments:
+            output_class, outputs_mask = self.mask_module(queries,
+                                                          mask_features,
+                                                          mask_segments,
+                                                          0,
+                                                          ret_attn_mask=False,
+                                                          point2segment=point2segment,
+                                                          coords=coords)
+        else:
+            output_class, outputs_mask = self.mask_module(queries,
+                                                          mask_features,
+                                                          None,
+                                                          0,
+                                                          ret_attn_mask=False,
+                                                          point2segment=None,
+                                                          coords=coords)
         predictions_class.append(output_class)
         predictions_mask.append(outputs_mask)
 

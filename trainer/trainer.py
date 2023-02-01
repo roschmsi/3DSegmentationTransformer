@@ -329,6 +329,8 @@ class InstanceSegmentation(pl.LightningModule):
 
         cross_attention_masks = cross_attention_masks.transpose(0, 2).cpu().numpy()
 
+        
+
         import pdb
         pdb.set_trace()
 
@@ -341,10 +343,13 @@ class InstanceSegmentation(pl.LightningModule):
             colors = np.array([255, 0, 0]) * mask
             colors[colors.sum(1) == 0] = 169
 
+
+            #attention_mask_normals = original_normals[mask[:,i].astype(bool), :] 
+
             
             v.add_points(f"Query {i}", cross_attention_coordinates.cpu().numpy(),
                         colors= colors,
-                        # normals=original_normals,
+                        #normals=attention_mask_normals,
                         visible=False,
                         point_size=point_size)
 
