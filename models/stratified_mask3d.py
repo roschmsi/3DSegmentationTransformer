@@ -234,7 +234,7 @@ class StratifiedMask3D(nn.Module):
         pcd_features = []
         for b in range(len(offset)):
             with torch.no_grad():
-                pcd_features = aux_decomposed[-1][b][0]
+                pcd_features = aux_decomposed[-1][0][b]
             
         aux_coords = [[a[1][b] for b in range(len(offset))] for a in aux_decomposed[:-1]]
         aux_pos_enc = self.get_pos_encs(aux_coords)
@@ -388,9 +388,6 @@ class StratifiedMask3D(nn.Module):
 
                 predictions_class.append(output_class)
                 predictions_mask.append(outputs_mask)
-
-            # import pdb
-            # pdb.set_trace()
 
         mask_features = [self.projection_layers[-1](aux_decomposed[-1][0][i]) for i in range(batch_size)]
         

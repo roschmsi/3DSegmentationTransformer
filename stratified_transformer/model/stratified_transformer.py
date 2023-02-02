@@ -114,20 +114,22 @@ class TransitionDown(nn.Module):
             else:
                 torch.save(idx, tdown_idx_path)
         
-        # breakpoint()
         n_xyz = xyz[idx.long(), :]  # (m, 3)
         n_masks = []
+        # breakpoint()
+        prev_mask_length = 0
         for i in range(len(n_offset)):
             start = 0 if i==0 else n_offset[i-1].item()
             end = n_offset[i].item()
-            n_masks.append(masks[i][idx[start:end].long() - masks[i-1].shape[0], :])
+            n_masks.append(masks[i][idx[start:end].long() - prev_mask_length, :])
+            prev_mask_length += masks[i].shape[0]
         
         feats = pointops.queryandgroup(self.k, xyz, n_xyz, feats, None, offset, n_offset, use_xyz=False)  # (m, nsample, 3+c)
         m, k, c = feats.shape
         feats = self.linear(self.norm(feats.view(m*k, c)).view(m, k, c)).transpose(1, 2).contiguous()
         feats = self.pool(feats).squeeze(-1)  # (m, c)
         
-        return feats, n_xyz, n_offset, masks
+        return feats, n_xyz, n_offset, n_masks
 
 
 class WindowAttention(nn.Module):
@@ -466,6 +468,8 @@ class Stratified(nn.Module):
         xyz_stack = []
         offset_stack = []
         masks_stack = []
+
+        # breakpoint()
 
         # feats (N, 6)
 
