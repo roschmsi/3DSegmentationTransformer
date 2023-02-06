@@ -9,6 +9,8 @@ from random import randrange
 
 
 import numpy
+from stratified_transformer.util.data_util import data_prepare_scannet
+from stratified_transformer.util.transform import Compose, RandomDropColor, RandomRotate, RandomScale
 import torch
 from datasets.random_cuboid import RandomCuboid
 
@@ -74,7 +76,9 @@ class SemanticSegmentationDataset(Dataset):
         add_clip=False,
         is_elastic_distortion=True,
         color_drop=0.0,
-        debug=False
+        debug=False,
+        preprocessing='mask3d',
+        voxel_size=0.02
     ):
         assert task in ["instance_segmentation", "semantic_segmentation"], "unknown task"
 
@@ -82,6 +86,9 @@ class SemanticSegmentationDataset(Dataset):
         self.dataset_name = dataset_name
         self.is_elastic_distortion = is_elastic_distortion
         self.color_drop = color_drop
+
+        self.preprocessing = preprocessing
+        self.voxel_size = voxel_size
 
         if self.dataset_name == "scannet":
             self.color_map = SCANNET_COLOR_MAP_20
@@ -358,184 +365,218 @@ class SemanticSegmentationDataset(Dataset):
             points[:, 10:12],
         )
 
-        # random downsampling
-        # TODO disable for overfit, enable for full training
-        if len(coordinates) > 100000 and "train" in self.mode:
-            idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
-            coordinates = coordinates[idx_kept]
-            color = color[idx_kept]
-            normals = normals[idx_kept]
-            segments = segments[idx_kept]
-            labels = labels[idx_kept]
+        if self.preprocessing == 'mask3d':
+            # random downsampling
+            # TODO disable for overfit, enable for full training
+            if len(coordinates) > 100000 and "train" in self.mode:
+                idx_kept = numpy.random.choice(numpy.arange(len(coordinates)), size = 100000, replace=False) 
+                coordinates = coordinates[idx_kept]
+                color = color[idx_kept]
+                normals = normals[idx_kept]
+                segments = segments[idx_kept]
+                labels = labels[idx_kept]
 
-        raw_coordinates = coordinates.copy()
-        raw_color = color
-        raw_normals = normals
+            raw_coordinates = coordinates.copy()
+            raw_color = color
+            raw_normals = normals
 
-        if not self.add_colors:
-            color = np.ones((len(color), 3))
+            if not self.add_colors:
+                color = np.ones((len(color), 3))
 
-        # volume and image augmentations for train
-        
-        if not self.debug and ("train" in self.mode or self.is_tta):
-            if self.cropping:
-                new_idx = self.random_cuboid(coordinates, labels[:,1],
-                                             self._remap_from_zero(labels[:, 0].copy()))
+            # volume and image augmentations for train
+            if not self.debug and ("train" in self.mode or self.is_tta):
+                if self.cropping:
+                    new_idx = self.random_cuboid(coordinates, labels[:,1],
+                                                self._remap_from_zero(labels[:, 0].copy()))
 
-                coordinates = coordinates[new_idx]
-                color = color[new_idx]
-                labels = labels[new_idx]
-                segments = segments[new_idx]
-                raw_color = raw_color[new_idx]
-                raw_normals = raw_normals[new_idx]
-                normals = normals[new_idx]
-                points = points[new_idx]
+                    coordinates = coordinates[new_idx]
+                    color = color[new_idx]
+                    labels = labels[new_idx]
+                    segments = segments[new_idx]
+                    raw_color = raw_color[new_idx]
+                    raw_normals = raw_normals[new_idx]
+                    normals = normals[new_idx]
+                    points = points[new_idx]
 
 
-            coordinates -= coordinates.mean(0)
+                coordinates -= coordinates.mean(0)
 
-            try:
-                coordinates += np.random.uniform(coordinates.min(0), coordinates.max(0)) / 2
-            except OverflowError as err:
-                print(coordinates)
-                print(coordinates.shape)
-                raise err
+                try:
+                    coordinates += np.random.uniform(coordinates.min(0), coordinates.max(0)) / 2
+                except OverflowError as err:
+                    print(coordinates)
+                    print(coordinates.shape)
+                    raise err
 
-            if self.instance_oversampling > 0.0:
-                coordinates, color, normals, labels = self.augment_individual_instance(
-                    coordinates, color, normals, labels, self.instance_oversampling
+                if self.instance_oversampling > 0.0:
+                    coordinates, color, normals, labels = self.augment_individual_instance(
+                        coordinates, color, normals, labels, self.instance_oversampling
+                    )
+
+                if self.flip_in_center:
+                    coordinates = flip_in_center(coordinates)
+
+                for i in (0, 1):
+                    if random() < 0.5:
+                        coord_max = np.max(points[:, i])
+                        coordinates[:, i] = coord_max - coordinates[:, i]
+
+                if random() < 0.95:
+                    if self.is_elastic_distortion:
+                        for granularity, magnitude in ((0.2, 0.4), (0.8, 1.6)):
+                            coordinates = elastic_distortion(
+                                coordinates, granularity, magnitude
+                            )
+                aug = self.volume_augmentations(
+                    points=coordinates, normals=normals, features=color, labels=labels,
                 )
+                coordinates, color, normals, labels = (
+                    aug["points"],
+                    aug["features"],
+                    aug["normals"],
+                    aug["labels"],
+                )
+                pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
+                color = np.squeeze(self.image_augmentations(image=pseudo_image)["image"])
 
-            if self.flip_in_center:
-                coordinates = flip_in_center(coordinates)
-
-            for i in (0, 1):
-                if random() < 0.5:
-                    coord_max = np.max(points[:, i])
-                    coordinates[:, i] = coord_max - coordinates[:, i]
-
-            if random() < 0.95:
-                if self.is_elastic_distortion:
-                    for granularity, magnitude in ((0.2, 0.4), (0.8, 1.6)):
-                        coordinates = elastic_distortion(
-                            coordinates, granularity, magnitude
+                if self.point_per_cut != 0:
+                    number_of_cuts = int(len(coordinates) / self.point_per_cut)
+                    for _ in range(number_of_cuts):
+                        size_of_cut = np.random.uniform(0.05, self.max_cut_region)
+                        # not wall, floor or empty
+                        point = choice(coordinates)
+                        x_min = point[0] - size_of_cut
+                        x_max = x_min + size_of_cut
+                        y_min = point[1] - size_of_cut
+                        y_max = y_min + size_of_cut
+                        z_min = point[2] - size_of_cut
+                        z_max = z_min + size_of_cut
+                        indexes = crop(
+                            coordinates, x_min, y_min, z_min, x_max, y_max, z_max
                         )
-            aug = self.volume_augmentations(
-                points=coordinates, normals=normals, features=color, labels=labels,
-            )
-            coordinates, color, normals, labels = (
-                aug["points"],
-                aug["features"],
-                aug["normals"],
-                aug["labels"],
-            )
+                        coordinates, normals, color, labels = (
+                            coordinates[~indexes],
+                            normals[~indexes],
+                            color[~indexes],
+                            labels[~indexes],
+                        )
+
+                # if self.noise_rate > 0:
+                #     coordinates, color, normals, labels = random_points(
+                #         coordinates,
+                #         color,
+                #         normals,
+                #         labels,
+                #         self.noise_rate,
+                #         self.ignore_label,
+                #     )
+
+                if (self.resample_points > 0) or (self.noise_rate > 0):
+                    coordinates, color, normals, labels = random_around_points(
+                        coordinates,
+                        color,
+                        normals,
+                        labels,
+                        self.resample_points,
+                        self.noise_rate,
+                        self.ignore_label,
+                    )
+
+                if self.add_unlabeled_pc:
+                    if random() < 0.8:
+                        new_points = np.load(
+                            self.other_database[
+                                np.random.randint(0, len(self.other_database) - 1)
+                            ]["filepath"]
+                        )
+                        (
+                            unlabeled_coords,
+                            unlabeled_color,
+                            unlabeled_normals,
+                            unlabeled_labels,
+                        ) = (
+                            new_points[:, :3],
+                            new_points[:, 3:6],
+                            new_points[:, 6:9],
+                            new_points[:, 9:],
+                        )
+                        unlabeled_coords -= unlabeled_coords.mean(0)
+                        unlabeled_coords += (
+                            np.random.uniform(
+                                unlabeled_coords.min(0), unlabeled_coords.max(0)
+                            )
+                            / 2
+                        )
+
+                        aug = self.volume_augmentations(
+                            points=unlabeled_coords,
+                            normals=unlabeled_normals,
+                            features=unlabeled_color,
+                            labels=unlabeled_labels,
+                        )
+                        (
+                            unlabeled_coords,
+                            unlabeled_color,
+                            unlabeled_normals,
+                            unlabeled_labels,
+                        ) = (
+                            aug["points"],
+                            aug["features"],
+                            aug["normals"],
+                            aug["labels"],
+                        )
+                        pseudo_image = unlabeled_color.astype(np.uint8)[np.newaxis, :, :]
+                        unlabeled_color = np.squeeze(
+                            self.image_augmentations(image=pseudo_image)["image"]
+                        )
+
+                        coordinates = np.concatenate((coordinates, unlabeled_coords))
+                        color = np.concatenate((color, unlabeled_color))
+                        normals = np.concatenate((normals, unlabeled_normals))
+                        labels = np.concatenate(
+                            (labels, np.full_like(unlabeled_labels, self.ignore_label))
+                        )
+
+                if random() < self.color_drop:
+                    color[:] = 255
+
+            # normalize color information
             pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
-            color = np.squeeze(self.image_augmentations(image=pseudo_image)["image"])
+            color = np.squeeze(self.normalize_color(image=pseudo_image)["image"])
 
-            if self.point_per_cut != 0:
-                number_of_cuts = int(len(coordinates) / self.point_per_cut)
-                for _ in range(number_of_cuts):
-                    size_of_cut = np.random.uniform(0.05, self.max_cut_region)
-                    # not wall, floor or empty
-                    point = choice(coordinates)
-                    x_min = point[0] - size_of_cut
-                    x_max = x_min + size_of_cut
-                    y_min = point[1] - size_of_cut
-                    y_max = y_min + size_of_cut
-                    z_min = point[2] - size_of_cut
-                    z_max = z_min + size_of_cut
-                    indexes = crop(
-                        coordinates, x_min, y_min, z_min, x_max, y_max, z_max
-                    )
-                    coordinates, normals, color, labels = (
-                        coordinates[~indexes],
-                        normals[~indexes],
-                        color[~indexes],
-                        labels[~indexes],
-                    )
+        elif self.preprocessing == "stratified":
+            if "train" in self.mode:
+                transform = Compose([
+                    RandomRotate(along_z=True),
+                    RandomScale(scale_low=0.8, scale_high=1.2),
+                    RandomDropColor(color_augment=0.0)
+                ])
+            else:
+                transform = None
 
-            # if self.noise_rate > 0:
-            #     coordinates, color, normals, labels = random_points(
-            #         coordinates,
-            #         color,
-            #         normals,
-            #         labels,
-            #         self.noise_rate,
-            #         self.ignore_label,
-            #     )
+            coordinates, color, labels, normals, segments = data_prepare_scannet(
+                coordinates,
+                color,
+                labels,
+                normals,
+                segments,
+                self.mode,
+                self.voxel_size,
+                voxel_max=120000,
+                transform=transform,
+                shuffle_index=True,
+                debug=self.debug,
+            )
 
-            if (self.resample_points > 0) or (self.noise_rate > 0):
-                coordinates, color, normals, labels = random_around_points(
-                    coordinates,
-                    color,
-                    normals,
-                    labels,
-                    self.resample_points,
-                    self.noise_rate,
-                    self.ignore_label,
-                )
+            raw_coordinates = coordinates.copy()
+            raw_color = color
+            raw_normals = normals
 
-            if self.add_unlabeled_pc:
-                if random() < 0.8:
-                    new_points = np.load(
-                        self.other_database[
-                            np.random.randint(0, len(self.other_database) - 1)
-                        ]["filepath"]
-                    )
-                    (
-                        unlabeled_coords,
-                        unlabeled_color,
-                        unlabeled_normals,
-                        unlabeled_labels,
-                    ) = (
-                        new_points[:, :3],
-                        new_points[:, 3:6],
-                        new_points[:, 6:9],
-                        new_points[:, 9:],
-                    )
-                    unlabeled_coords -= unlabeled_coords.mean(0)
-                    unlabeled_coords += (
-                        np.random.uniform(
-                            unlabeled_coords.min(0), unlabeled_coords.max(0)
-                        )
-                        / 2
-                    )
+            if not self.add_colors:
+                color = np.ones((len(color), 3))
 
-                    aug = self.volume_augmentations(
-                        points=unlabeled_coords,
-                        normals=unlabeled_normals,
-                        features=unlabeled_color,
-                        labels=unlabeled_labels,
-                    )
-                    (
-                        unlabeled_coords,
-                        unlabeled_color,
-                        unlabeled_normals,
-                        unlabeled_labels,
-                    ) = (
-                        aug["points"],
-                        aug["features"],
-                        aug["normals"],
-                        aug["labels"],
-                    )
-                    pseudo_image = unlabeled_color.astype(np.uint8)[np.newaxis, :, :]
-                    unlabeled_color = np.squeeze(
-                        self.image_augmentations(image=pseudo_image)["image"]
-                    )
-
-                    coordinates = np.concatenate((coordinates, unlabeled_coords))
-                    color = np.concatenate((color, unlabeled_color))
-                    normals = np.concatenate((normals, unlabeled_normals))
-                    labels = np.concatenate(
-                        (labels, np.full_like(unlabeled_labels, self.ignore_label))
-                    )
-
-            if random() < self.color_drop:
-                color[:] = 255
-
-        # normalize color information
-        pseudo_image = color.astype(np.uint8)[np.newaxis, :, :]
-        color = np.squeeze(self.normalize_color(image=pseudo_image)["image"])
+        else:
+            raise ValueError('invalid preprocessing: choose stratified or mask3d')
 
         # prepare labels and map from 0 to 20(40)
         labels = labels.astype(np.int32)

@@ -2,12 +2,12 @@
 _target_: models.StratifiedMask3D
 
 # transformer parameters
-hidden_dim: 128
+hidden_dim: 256
 dim_feedforward: 1024
 num_queries: 100
 num_heads: 8
-num_decoders: 3
-dropout: 0.0
+num_decoders: 5
+dropout: 0.1
 pre_norm: false
 use_level_embed: false
 normalize_pos_enc: true
@@ -60,3 +60,5 @@ config:
     stem_transformer: False
     patch_size: 1
     debug: ${data.debug}
+
+freeze_backbone: False

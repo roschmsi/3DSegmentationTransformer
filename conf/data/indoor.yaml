@@ -43,3 +43,5 @@ crop_length: 6.0
 cropping_v1: true
 
 debug: false
+
+preprocessing: mask3d

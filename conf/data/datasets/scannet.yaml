@@ -32,6 +32,8 @@ train_dataset:
   filter_out_classes: [0, 1]
   label_offset: 2
   debug: ${data.debug}
+  preprocessing: ${data.preprocessing}
+  voxel_size: ${data.voxel_size}
 
 validation_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
@@ -56,6 +58,8 @@ validation_dataset:
   filter_out_classes: [0, 1]
   label_offset: 2
   debug: ${data.debug}
+  preprocessing: ${data.preprocessing}
+  voxel_size: ${data.voxel_size}
 
 test_dataset:
   _target_: datasets.semseg.SemanticSegmentationDataset
