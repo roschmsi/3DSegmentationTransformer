@@ -153,7 +153,7 @@ python datasets/preprocessing/scannet_preprocessing.py preprocess \
 --scannet200=false/true
 
 
-### Training and testing 
+## Training 
 Train Mask3D on the ScanNet dataset:
 ```bash
 python stratified_instance_segmentation.py \
