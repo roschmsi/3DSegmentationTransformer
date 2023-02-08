@@ -1141,7 +1141,10 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                             sort_scores_values, point_size=20, sorted_heatmaps=None,
                             query_pos=None, backbone_features=None):
 
-        full_res_coords -= full_res_coords.mean(axis=0)
+       full_res_coords = full_res_coords.detach().cpu().numpy()
+       full_res_coords -= full_res_coords.mean(axis=0)
+       original_colors = original_colors.detach().cpu().numpy()
+       original_normals = original_normals.detach().cpu().numpy() 
 
         gt_pcd_pos = []
         gt_pcd_normals = []
@@ -1315,7 +1318,7 @@ class StratifiedInstanceSegmentation(pl.LightningModule):
                 torch.use_deterministic_algorithms(True)
 
         if self.config.general.save_visualizations:
-            backbone_features = output['backbone_features'].F.detach().cpu().numpy()
+            backbone_features = output['backbone_features'].detach().cpu().numpy()
             from sklearn import decomposition
             pca = decomposition.PCA(n_components=3)
             pca.fit(backbone_features)
