@@ -151,7 +151,7 @@ python datasets/preprocessing/scannet_preprocessing.py preprocess \
 --save_dir="../../data/processed/scannet" \
 --git_repo="PATH_TO_SCANNET_GIT_REPO" \
 --scannet200=false/true
-
+```
 
 ## Training 
 Train Mask3D on the ScanNet dataset:
