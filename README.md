@@ -20,29 +20,6 @@ the model focuses to make a certain predictioni
 ## Code structure
 We adapt the codebase of [Mask3D](https://github.com/JonasSchult/Mask3D/) and integrate it with [Stratified Transformer](https://github.com/dvlab-research/Stratified-Transformer) to perform instance segmentation.
 
-
-```
-├── mix3d
-│   ├── main_instance_segmentation.py <- the main file
-│   ├── conf                          <- hydra configuration files
-│   ├── datasets
-│   │   ├── preprocessing             <- folder with preprocessing scripts
-│   │   ├── semseg.py                 <- indoor dataset
-│   │   └── utils.py        
-│   ├── models                        <- Mask3D modules
-│   ├── trainer
-│   │   ├── __init__.py
-│   │   └── trainer.py                <- train loop
-│   └── utils
-├── data
-│   ├── processed                     <- folder for preprocessed datasets
-│   └── raw                           <- folder for raw datasets
-├── scripts                           <- train scripts
-├── docs
-├── README.md
-└── saved                             <- folder that stores models and logs
-```
-
 ```
 ├── conf
 │   ├── augmentation					<- hydra configuration files
